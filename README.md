@@ -1,27 +1,46 @@
 <table style="width:100%">
 <tr>
-<th width="100%"><img src="docs/img/graffitist_white_left.svg" width="30%"><h3>Graph Transforms in TensorFlow to Quantize, Prune, Compress and Retrain Deep Neural Nets</h3></th>
+<th width="100%">
+<img src="docs/img/graffitist_white_left.svg" width="30%" align="center">
+<h2>Graph Transforms to Quantize and Retrain Deep Neural Nets in TensorFlow</h2>
+</th>
 </tr>
 </table>
 
-`Graffitist` is a flexible and scalable framework to process low-level TensorFlow graph descriptions of deep neural networks (DNNs) for accurate and efficient inference on fixed-point hardware. It comprises of a (growing) library of transforms to apply various neural network compression techniques such as quantization, pruning, and compression. Each transform consists of unique pattern matching and manipulation algorithms that when run sequentially produce an optimized output graph.
+Graffitist is a flexible and scalable framework built on top of TensorFlow to process low-level graph descriptions of deep neural networks (DNNs) for accurate and efficient inference on fixed-point hardware. It comprises of a (growing) library of transforms to apply various neural network compression techniques such as quantization, pruning, and compression. Each transform consists of unique pattern matching and manipulation algorithms that when run sequentially produce an optimized output graph.
 
 <img src="docs/img/graffitist_flow.PNG" width="100%">
 
-`Graffitist` is developed from the ground up to tightly integrate with TensorFlow's static data-flow graph semantics. This comes with many benefits expected from a mature machine learning framework, such as production readiness, accelerated kernels for bit-accurate emulation, strong low-level graph processing API, large-scale distributed training, extensive pretrained model-zoo, clean documentation and great support from TensorFlow developers and the open-source community.
+Graffitist stands on the shoulders of giants, and the interface is inspired in part by [earlier](https://github.com/tensorflow/tensorflow/blob/v1.13.1/tensorflow/tools/graph_transforms/README.md) [tools](https://github.com/tensorflow/tensorflow/blob/v1.13.1/tensorflow/contrib/quantize/README.md) from TensorFlow. It is developed with tight integration to the static data-flow graph semantics of TensorFlow. This comes with many benefits of a mature ML framework, such as strong low-level graph processing API, accelerated kernels for bit-accurate emulation, extensive pretrained model-zoo, large-scale distributed training, production readiness, clean documentation and great support from TensorFlow developers and the open-source community.
+
+Graffitist uses a novel quantization threshold training technique called **A**daptive-Gradient **L**og-domain **T**hreshold Training (**ALT**) which results in highly accurate and efficient 8-bit and 4-bit quantized networks, amenable to most generic fixed-point hardware. For details, please refer to our paper:
+
+**[Trained Uniform Quantization for Accurate and Efficient Neural Network Inference on Fixed-Point Hardware](https://arxiv.org/abs/1903.08066)**,
+<br>
+[Sambhav R. Jain](mailto:sambhav@alumni.stanford.edu),
+[Albert Gural](mailto:agural@alumni.stanford.edu),
+[Michael Wu](mailto:miwu@xilinx.com),
+[Chris Dick](mailto:chrisd@xilinx.com),
+<br>
+*arXiv preprint* arXiv:1903.08066, 2019.
 
 ## Contents
 
 * [Quantization](#quantization)
-   * [Supported ops](#supported-ops)
+   * [Quantization Scheme](#quantization-scheme)
+      * [Supported ops](#supported-ops)
+      * [Supported layer topologies](#supported-layer-topologies)
+      * [Supported optimizations](#supported-optimizations)
+      * [Supported precisions](#supported-precisions)
    * [Imagenet performance](#imagenet-performance)
       * [Changelog](#changelog)
       * [Reproducibility](#reproducibility)
+   * [Citations](#citations)
 * [Requirements](#requirements)
    * [Installation](#installation)
       * [Install Anaconda3](#install-anaconda3)
-      * [Install TensorFlow-1.12](#install-tensorflow-112)
-      * [<em>(Optional)</em> Install CUDA 9, cuDNN 7](#optional-install-cuda-9-cudnn-7)
+      * [Install TensorFlow 1.12](#install-tensorflow-112)
+      * [<em>(Optional)</em> Install CUDA 9.0, cuDNN 7](#optional-install-cuda-90-cudnn-7)
 * [Python API](#python-api)
 * [How to run](#how-to-run)
    * [Prepare models](#prepare-models)
@@ -31,7 +50,7 @@
       * [Recipe 1: Optimized inference graph](#recipe-1-optimized-inference-graph)
       * [Recipe 2: Quantized inference graph (static mode)](#recipe-2-quantized-inference-graph-static-mode)
       * [Recipe 3: Quantized training graph (retrain mode)](#recipe-3-quantized-training-graph-retrain-mode)
-* [Validation](#validation)
+* [Kernels](#kernels)
 * [Common errors](#common-errors)
 * [Default model config](#default-model-config)
 
@@ -39,54 +58,100 @@
 
 ## Quantization
 
-For simplicity of implementation on generic fixed-point hardware, the quantization scheme (for both INT8 and INT4) is constrained to use linear (affine symmetric) mapping with no zero-points, strict powers-of-2 scale-factors, per-tensor and mid-tread quantization. These constraints are basically lossless with INT8, and may be relaxed for lower precisions if needed.
+Graffitist allows for quantization in two modes:
 
-`Graffitist` allows for quantization in two modes:
+1. **Static Mode.** Quantization thresholds (hence scale factors) are determined based on statistics of activations derived from a *calibration dataset*^. This results in quantized performance (INT8) that is usually competitive with floating-point baselines (FP32) without retraining. Note that while calibration can run on CPU within tens of minutes, use of GPU is recommended due to its ~O(n^2) runtime complexity.
 
-1. **Static Mode.** Quantization thresholds (hence scale factors) are determined based on statistics of activations derived from a *calibration dataset*^. This results in quantized performance (INT8) that is usually competitive with single precision baselines (FP32) without retraining. Note that while calibration can run on CPU within tens of minutes, use of GPU is recommended due to its ~O(n^2) runtime complexity.
-
-1. **Retrain Mode.** Networks are retrained with quantization-in-the-loop (QIL) for improved accuracy and further reduced precision (e.g. INT4). This novel approach yields highly accurate and compact DNN implementations on a fixed-point target. In many cases, INT8 retrained networks match FP32 accuracies while INT4 retrained networks reach within 1-3% of it depending on network topology. Recovery is achieved in less than 5 epochs of retraining.
+1. **Retrain Mode.** Quantization thresholds and weights are simultaneously trained (ALT method) for improved accuracy and further reduced precision (e.g. INT4). This approach yields highly accurate and compact DNN implementations on a fixed-point target. In many cases, INT8 retrained networks match FP32 accuracy while INT4 retrained networks reach within 1-3% of it depending on network topology. Recovery is achieved within 5 epochs of ALT training.
 
 *^small randomly chosen subset of the validation set with appropriate pre-processing applied*
 
-### Supported ops
+### Quantization scheme
 
-The following ops are currently supported:
+For simplicity and ease of mapping on generic fixed-point hardware, the quantization scheme is constrained to use linear (affine symmetric) mapping with:
+- no zero-points
+- strict powers-of-2 scale-factors
+- per-tensor quantization (for both weights and activations)
+- mid-tread quantization
+
+#### Supported ops
+
 - compute: `Conv2D`, `MatMul`, `DepthwiseConv2dNative`
 - normalization: `FusedBatchNorm`
-- activation: `Relu`, `Relu6`, `Maximum` (leaky-relu)
-- scale preserving: `ConcatV2`, `BiasAdd`, `Add` (eltwise)
+- activation: `Relu`, `Relu6`, `Maximum` (for leaky-relu)
+- scale preserving: `ConcatV2`, `BiasAdd`, `Add` (eltwise-add), `Maximum` (for leaky-relu)
 - pool: `MaxPool`, `AvgPool`
 - classifier: `Softmax`
 
+#### Supported layer topologies
+
+- compute -> normalization/bias-add
+- compute -> normalization/bias-add -> activation
+- compute -> normalization/bias-add -> eltwise-add
+- compute -> normalization/bias-add -> eltwise-add -> activation (relu/relu6)
+
+#### Supported optimizations
+
+- normalization layers following compute layers are folded in
+- concat-of-concat layers are collapsed
+- identity nodes without control edges are spliced
+- avgpool is transformed to depthwise conv with reciprocal multiplier as weights
+- input scale sharing is enforced for concat, bias-add, eltwise-add and max ops
+- relu/relu6 outputs are quantized to uint8 instead of int8
+
+#### Supported precisions
+
+- compute layers are quantized as q<sub>8</sub>( q<sub>16</sub>( *sum*( q<sub>8/4</sub>(**w**)\*q<sub>8</sub>(**x**) ) ) + q<sub>16</sub>(**b**) )
+- leaky-relu is quantized as q<sub>8</sub>( *max*( q<sub>16</sub>(**x**), q<sub>16</sub>( q<sub>16</sub>(**a**)\*q<sub>16</sub>(**x**) ) ) )
+- eltwise-add is quantized as q<sub>8</sub>( q<sub>8</sub>(**x**) + q<sub>8</sub>(**y**) )
+- avgpool is quantized as q<sub>8</sub>( *sum*( q<sub>18</sub>(**r**)\*q<sub>8</sub>(**x**) ) )
+
+Graffitist is in experimental stages as we continue to add support for more operation types, layer topologies, network styles, graph optimizations, and compression techniques. To request support for options not mentioned above, please submit an [issue](https://github.com/Xilinx/graffitist/issues/new) with details.
+
 ### Imagenet performance
 
-|    Network\*   |      FP32     | INT8 (static) |    FP32 (retrain)   |    INT8 (retrain)   |   INT4^ (retrain)   |
-|----------------|:-------------:|:-------------:|:-------------------:|:-------------------:|:-------------------:|
-|                | top-1 / top-5 | top-1 / top-5 | top-1 / top-5 [#ep] | top-1 / top-5 [#ep] | top-1 / top-5 [#ep] |
-| vgg16          |  70.9 / 89.8  |  70.4 / 89.7  |  71.9 / 90.5 [1.0]  |  71.7 / 90.4 [0.9]  |  71.5 / 90.3 [4.0]  |
-| vgg19          |  71.0 / 89.8  |  70.4 / 89.7  |  71.8 / 90.4 [1.0]  |  71.7 / 90.4 [1.0]  |  71.2 / 90.1 [2.0]  |
-| resnet_v1_50   |  75.2 / 92.2  |  74.3 / 91.7  |  75.4 / 92.5 [3.7]  |  75.4 / 92.3 [1.9]  |  74.4 / 91.7 [2.0]  |
-| resnet_v1_101  |  76.4 / 92.9  |  74.8 / 92.0  |  76.6 / 93.2 [1.2]  |  76.4 / 93.1 [0.9]  |  75.7 / 92.5 [2.0]  |
-| resnet_v1_152  |  76.8 / 93.2  |  76.2 / 93.0  |  76.8 / 93.3 [1.0]  |  76.7 / 93.3 [1.4]  |  76.0 / 93.0 [1.9]  |
-| inception_v1   |  69.8 / 89.6  |  68.6 / 88.9  |  70.3 / 90.0 [2.8]  |  70.7 / 90.2 [2.4]  |  67.2 / 88.2 [4.0]  |
-| inception_v2   |  74.0 / 91.8  |  73.1 / 91.3  |  74.3 / 92.2 [3.3]  |  74.4 / 92.4 [2.5]  |  71.9 / 90.8 [4.8]  |
-| inception_v3   |  78.0 / 93.9  |  76.8 / 93.3  |  78.3 / 94.2 [2.1]  |  78.3 / 94.3 [1.2]  |  76.4 / 93.1 [4.4]  |
-| inception_v4   |  80.2 / 95.2  |  79.4 / 94.6  |      n/a            |  80.1 / 95.2 [1.5]  |  78.9 / 94.7 [4.2]  |
-| mobilenet_v1   |  71.0 / 90.0  |   0.6 / 3.6   |  71.1 / 90.0 [3.4]  |  71.1 / 90.0 [2.1]  |      n/a            |
-| mobilenet_v2   |  70.1 / 89.5  |   0.3 / 1.2   |  71.7 / 90.7 [3.2]  |  71.8 / 90.6 [2.2]  |      n/a            |
-| darknet19      |  73.0 / 91.4  |  68.7 / 89.7  |  74.4 / 92.3 [3.1]  |  74.5 / 92.3 [1.8]  |  73.2 / 91.6 [2.8]  |
+|  Static Mode   |      FP32     | INT8 (static) |
+|----------------|:-------------:|:-------------:|
+|                | top-1 / top-5 | top-1 / top-5 |
+| vgg16          |  70.9 / 89.8  |  70.4 / 89.7  |
+| vgg19          |  71.0 / 89.8  |  70.4 / 89.7  |
+| resnet_v1_50   |  75.2 / 92.2  |  74.3 / 91.7  |
+| resnet_v1_101  |  76.4 / 92.9  |  74.8 / 92.0  |
+| resnet_v1_152  |  76.8 / 93.2  |  76.2 / 93.0  |
+| inception_v1   |  69.8 / 89.6  |  68.6 / 88.9  |
+| inception_v2   |  74.0 / 91.8  |  73.1 / 91.3  |
+| inception_v3   |  78.0 / 93.9  |  76.8 / 93.3  |
+| inception_v4   |  80.2 / 95.2  |  79.4 / 94.6  |
+| mobilenet_v1   |  71.0 / 90.0  |   0.6 / 3.6   |
+| mobilenet_v2   |  70.1 / 89.5  |   0.3 / 1.2   |
+| darknet19      |  73.0 / 91.4  |  68.7 / 89.7  |
 
-\*To get started we provide the above models (`.pb`/`.meta`), pre-trained FP32 weights (`.ckpt`) and calibration datasets (`.npy`) with applied preprocessing. Both eval and training versions of these networks are included (for static and retrain mode respectively). This is because training specific layers (`batch_normalization`, `dropout`, etc) behave differently in the two modes.
+|  Retrain Mode  |  FP32 (retrain wt)  |  INT8 (retrain wt)  | INT8 (retrain wt,th)|INT4^ (retrain wt,th)|
+|----------------|:-------------------:|:-------------------:|:-------------------:|:-------------------:|
+|                | top-1 / top-5 [#ep] | top-1 / top-5 [#ep] | top-1 / top-5 [#ep] | top-1 / top-5 [#ep] |
+| vgg16          |  71.9 / 90.5 [1.0]  |  71.8 / 90.5 [1.0]  |  71.7 / 90.4 [0.9]  |  71.5 / 90.3 [4.0]  |
+| vgg19          |  71.8 / 90.4 [1.0]  |  71.7 / 90.4 [1.0]  |  71.7 / 90.4 [1.0]  |  71.2 / 90.1 [2.0]  |
+| resnet_v1_50   |  75.4 / 92.5 [3.7]  |  75.3 / 92.3 [1.0]  |  75.4 / 92.3 [1.9]  |  74.4 / 91.7 [2.0]  |
+| resnet_v1_101  |  76.6 / 93.2 [1.2]  |  76.3 / 93.0 [1.0]  |  76.4 / 93.1 [0.9]  |  75.7 / 92.5 [2.0]  |
+| resnet_v1_152  |  76.8 / 93.3 [1.0]  |  76.7 / 93.3 [1.5]  |  76.7 / 93.3 [1.4]  |  76.0 / 93.0 [1.9]  |
+| inception_v1   |  70.3 / 90.0 [2.8]  |  70.6 / 90.3 [3.5]  |  70.7 / 90.2 [2.4]  |  67.2 / 88.2 [4.0]  |
+| inception_v2   |  74.3 / 92.2 [3.3]  |  74.4 / 92.3 [4.7]  |  74.4 / 92.4 [2.5]  |  71.9 / 90.8 [4.8]  |
+| inception_v3   |  78.3 / 94.2 [2.1]  |  78.2 / 94.1 [2.0]  |  78.3 / 94.3 [1.2]  |  76.4 / 93.1 [4.4]  |
+| inception_v4   |  80.2 / 95.2 [n/a]  |  80.1 / 95.3 [1.7]  |  80.1 / 95.2 [1.5]  |  78.9 / 94.7 [4.2]  |
+| mobilenet_v1   |  71.1 / 90.0 [3.4]  |  67.0 / 87.9 [4.6]  |  71.1 / 90.0 [2.1]  |      n/a            |
+| mobilenet_v2   |  71.7 / 90.7 [3.2]  |  68.2 / 89.0 [2.7]  |  71.8 / 90.6 [2.2]  |      n/a            |
+| darknet19      |  74.4 / 92.3 [3.1]  |  72.9 / 91.6 [3.8]  |  74.5 / 92.3 [1.8]  |  73.2 / 91.6 [2.8]  |
 
 ^INT4 weights, INT8 activations. First/last layer weights are kept as INT8.
+
+To get started we provide the FP32 models (`.pb`/`.meta`), pre-trained weights (`.ckpt`) and calibration datasets (`.npy`) with applied preprocessing. Both eval and training versions of these networks are included (for static and retrain mode respectively). This is because training specific layers (`batch_normalization`, `dropout`, etc) behave differently in the two modes.
 
 #### Changelog
 
 The following modifications were done before exporting the graph definitions to serialized TensorFlow protocol buffers:
 1. Replaced `reduce_mean` with `avg_pool`
-1. Removed `dropout` (retrain mode)
-1. Removed auxiliary logits layers (retrain mode)
+1. Removed `dropout`
+1. Removed auxiliary logits layers
 
 #### Reproducibility
 
@@ -100,17 +165,45 @@ The top-1/top-5 accuracy metrics are evaluated on Imagenet validation set (50k i
   - when more than one valid topological orders are feasible
   - due to inexact floating point math
 
+### Citations
+
+If you find our work useful for your research, please cite:
+
+#### Paper
+
+```
+@article{alt2019,
+  title={Trained Uniform Quantization for Accurate and Efficient Neural Network Inference on Fixed-Point Hardware},
+  author={Jain, Sambhav R and Gural, Albert and Wu, Michael and Dick, Chris},
+  journal={arXiv preprint arXiv:1903.08066},
+  year={2019}
+}
+```
+
+#### Code
+
+```
+@misc{graffitist2019,
+  author = {Xilinx},
+  title = {Graffitist: Graph Transforms in TensorFlow to Quantize and Retrain Deep Neural Nets},
+  year = {2019},
+  publisher = {GitHub},
+  journal = {GitHub repository},
+  howpublished = {\url{https://github.com/Xilinx/graffitist}}
+}
+```
+
 [[back to ToC]](#contents)
 
 ---
 
 ## Requirements
 
-`Graffitist` is packaged with custom kernels (C++/CUDA) for quantization that are pre-compiled on the following configuration:
+Graffitist is packaged with custom quantization kernels (C++/CUDA) that are pre-compiled on the following configuration:
 - Ubuntu 16.04
 - Python 3.6
 - TensorFlow 1.12 (CPU or GPU)
-- CUDA 9, cuDNN 7 (if GPU)
+- CUDA 9.0, cuDNN 7 (if GPU)
 
 ### Installation
 
@@ -133,7 +226,7 @@ conda create -n venv pip python=3.6
 conda activate venv
 ```
 
-#### Install TensorFlow-1.12
+#### Install TensorFlow 1.12
 
 CPU-only:
 ```
@@ -145,7 +238,7 @@ GPU:
 pip install --ignore-installed --upgrade https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.12.0-cp36-cp36m-linux_x86_64.whl
 ```
 
-#### *(Optional)* Install CUDA 9, cuDNN 7
+#### *(Optional)* Install CUDA 9.0, cuDNN 7
 
 The following NVIDIA® software is required to use TensorFlow with GPU support:
 
@@ -160,7 +253,7 @@ The following NVIDIA® software is required to use TensorFlow with GPU support:
 
 ## Python API
 
-`Graffitist` uses a Python frontend and is invoked as follows:
+Graffitist uses a Python frontend and is invoked as follows:
 ```
 python graffitize.pyc \
     --in_graph <path_to_in_graph.pb> \
@@ -196,7 +289,7 @@ If using one of the provided models, simply download and extract to `./models/` 
 | inception_v4   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.inception_v4_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.inception_v4_slim_pretrained_train_2019-01-09.zip)
 | mobilenet_v1   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v1_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v1_slim_pretrained_train_2019-01-09.zip)
 | mobilenet_v2   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v2_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v2_slim_pretrained_train_2019-01-09.zip)
-| darknet19      | [TBA]() / [TBA]()
+| darknet19      | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.darknet19_dw2tf_pretrained_0313_0943.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.darknet19_dw2tf_pretrained_train_0313_0943.zip)
 
 If bringing your own model (BYOM), ensure the following files are saved out to `./models/my_model_dir/`:
 ```
@@ -219,7 +312,7 @@ Refer [here](https://www.tensorflow.org/guide/saved_model#save_variables) for de
 
 The metagraph `.meta` contains the graph and training metadata (e.g. variable collections, weight regularization). It is not necessary in static mode, but required in retrain mode. Refer [here](https://www.tensorflow.org/api_guides/python/meta_graph) for details on exporting TensorFlow metagraph.
 
-The calibration set `.npy` contains N randomly sampled images with data pre-processing applied, stored as a numpy array of shape `[N, H, W, C]`.
+The calibration set `.npy` contains N randomly sampled images with applied data pre-processing, stored as a numpy array of shape `[N, H, W, C]`.
 
 ### Set paths
 
@@ -263,7 +356,7 @@ If BYOM, set config options based on your model (similar to the examples provide
 
 #### Recipe 1: Optimized inference graph
 
-This recipe applies various layer optimizations and pre-processing to generate a simplified inference graph.
+This recipe applies various layer optimizations and pre-processing to generate a simplified inference graph (not yet quantized).
 ```
 python $groot/graffitize.pyc \
     --in_graph $in_graph \
@@ -336,9 +429,9 @@ python $groot/graffitize.pyc \
 
 ---
 
-## Validation
+## Kernels
 
-In order to evaluate the accuracy of the quantized network, first load the compiled kernels by prepending the following code (fix paths as necessary) to your validation script:
+To validate on the quantized network, first load the pre-compiled kernels by prepending the following code (fix paths as necessary) to your validation script:
 ```python
 import tensorflow as tf
 
@@ -362,7 +455,8 @@ else:
 | `RuntimeError: Bad magic number in .pyc file` | Use correct Python version; see [Requirements](#requirements)
 | `tensorflow.python.framework.errors_impl.NotFoundError: graffitist/kernels/quantize_ops.so: undefined symbol: _ZN10tensorflow22CheckNotInComputeAsyncEPNS_15OpKernelContextEPKc` | Use correct TensorFlow version; see [Requirements](#requirements)
 | `tensorflow.python.framework.errors_impl.NotFoundError: graffitist/kernels/quantize_ops_cuda.so: undefined symbol: _ZN10tensorflow22CheckNotInComputeAsyncEPNS_15OpKernelContextEPKc` | Use correct TensorFlow version; see [Requirements](#requirements)
-| `RecursionError: maximum recursion depth exceeded in comparison` | Stack limit set to 3k (default: 1k) to avoid stack overflows for lack of tail-call optimization in Python; contact us
+| `ImportError: libcublas.so.9.0: cannot open shared object file: No such file or directory` | Use correct CUDA version with TF for GPU; see [Requirements](#requirements)
+| `RecursionError: maximum recursion depth exceeded in comparison` | Stack limit set to 3k (default: 1k) to avoid stack overflows for lack of tail-call optimization in Python; [get in touch](https://github.com/Xilinx/graffitist/issues/new)
 
 [[back to ToC]](#contents)
 
