@@ -11,7 +11,7 @@ Graffitist is a flexible and scalable framework built on top of TensorFlow to pr
 
 <img src="docs/img/graffitist_flow.PNG" width="100%">
 
-Graffitist stands on the shoulders of giants, and the interface is inspired in part by [earlier](https://github.com/tensorflow/tensorflow/blob/v1.13.1/tensorflow/tools/graph_transforms/README.md) [tools](https://github.com/tensorflow/tensorflow/blob/v1.13.1/tensorflow/contrib/quantize/README.md) from TensorFlow. It is developed with tight integration to the static data-flow graph semantics of TensorFlow. This comes with many benefits of a mature ML framework, such as strong low-level graph processing API, accelerated kernels for bit-accurate emulation, extensive pretrained model-zoo, large-scale distributed training, production readiness, clean documentation and great support from TensorFlow developers and the open-source community.
+Graffitist stands on the shoulders of giants, and the interface is inspired in part by [earlier](https://github.com/tensorflow/tensorflow/blob/r1.12/tensorflow/tools/graph_transforms/README.md) [tools](https://github.com/tensorflow/tensorflow/blob/r1.12/tensorflow/contrib/quantize/README.md) from TensorFlow. It is developed with tight integration to the static data-flow graph semantics of TensorFlow. This comes with many benefits of a mature ML framework, such as strong low-level graph processing API, accelerated kernels for bit-accurate emulation, extensive pretrained model-zoo, large-scale distributed training, production readiness, clean documentation and great support from TensorFlow developers and the open-source community.
 
 Graffitist uses a novel quantization threshold training technique called **A**daptive-Gradient **L**og-domain **T**hreshold Training (**ALT**) which results in highly accurate and efficient 8-bit and 4-bit quantized networks, amenable to most generic fixed-point hardware. For details, please refer to our paper:
 
@@ -36,12 +36,14 @@ Graffitist uses a novel quantization threshold training technique called **A**da
       * [Changelog](#changelog)
       * [Reproducibility](#reproducibility)
    * [Citations](#citations)
+* [Python API](#python-api)
 * [Requirements](#requirements)
+   * [Kernels](#kernels)
    * [Installation](#installation)
       * [Install Anaconda3](#install-anaconda3)
       * [Install TensorFlow 1.12](#install-tensorflow-112)
       * [<em>(Optional)</em> Install CUDA 9.0, cuDNN 7](#optional-install-cuda-90-cudnn-7)
-* [Python API](#python-api)
+      * [Clone Graffitist](#clone-graffitist)
 * [How to run](#how-to-run)
    * [Prepare models](#prepare-models)
    * [Set paths](#set-paths)
@@ -50,7 +52,6 @@ Graffitist uses a novel quantization threshold training technique called **A**da
       * [Recipe 1: Optimized inference graph](#recipe-1-optimized-inference-graph)
       * [Recipe 2: Quantized inference graph (static mode)](#recipe-2-quantized-inference-graph-static-mode)
       * [Recipe 3: Quantized training graph (retrain mode)](#recipe-3-quantized-training-graph-retrain-mode)
-* [Kernels](#kernels)
 * [Common errors](#common-errors)
 * [Default model config](#default-model-config)
 
@@ -62,7 +63,7 @@ Graffitist allows for quantization in two modes:
 
 1. **Static Mode.** Quantization thresholds (hence scale factors) are determined based on statistics of activations derived from a *calibration dataset*^. This results in quantized performance (INT8) that is usually competitive with floating-point baselines (FP32) without retraining. Note that while calibration can run on CPU within tens of minutes, use of GPU is recommended due to its ~O(n^2) runtime complexity.
 
-1. **Retrain Mode.** Quantization thresholds and weights are simultaneously trained (ALT method) for improved accuracy and further reduced precision (e.g. INT4). This approach yields highly accurate and compact DNN implementations on a fixed-point target. In many cases, INT8 retrained networks match FP32 accuracy while INT4 retrained networks reach within 1-3% of it depending on network topology. Recovery is achieved within 5 epochs of ALT training.
+1. **Retrain Mode.** Quantization thresholds and weights are simultaneously trained (ALT method) for improved accuracy and further reduced precision (e.g. INT4). This approach yields highly accurate and compact DNN implementations on a fixed-point target. In many cases, INT8 retrained networks match FP32 accuracy while INT4 retrained networks reach within 1-3% of it depending on network topology. Recovery is achieved within 5 epochs of ALT retraining.
 
 *^small randomly chosen subset of the validation set with appropriate pre-processing applied*
 
@@ -144,8 +145,6 @@ Graffitist is in experimental stages as we continue to add support for more oper
 
 ^INT4 weights, INT8 activations. First/last layer weights are kept as INT8.
 
-To get started we provide the FP32 models (`.pb`/`.meta`), pre-trained weights (`.ckpt`) and calibration datasets (`.npy`) with applied preprocessing. Both eval and training versions of these networks are included (for static and retrain mode respectively). This is because training specific layers (`batch_normalization`, `dropout`, etc) behave differently in the two modes.
-
 #### Changelog
 
 The following modifications were done before exporting the graph definitions to serialized TensorFlow protocol buffers:
@@ -155,7 +154,7 @@ The following modifications were done before exporting the graph definitions to 
 
 #### Reproducibility
 
-The top-1/top-5 accuracy metrics are evaluated on Imagenet validation set (50k images) downloaded from [here](http://www.image-net.org/download-images) and processed into TFRecord format using [this script](https://github.com/tensorflow/models/blob/1bfe1df1c37f341338cb2e00bf67a1c1c82f42ef/research/slim/datasets/build_imagenet_data.py). We expect to see some degree of randomness (+-0.1%) between runs on:
+The top-1/top-5 accuracy metrics are evaluated on Imagenet validation set (50k images) downloaded from [here](http://www.image-net.org/download-images) and processed into TFRecord format using [this script](https://github.com/tensorflow/models/blob/r1.12.0/research/slim/datasets/build_imagenet_data.py). We expect to see some degree of randomness (+-0.1%) between runs on:
 
 - different platforms
   - when dataset is processed using different image library versions
@@ -197,6 +196,59 @@ If you find our work useful for your research, please cite:
 
 ---
 
+## Python API
+
+Graffitist uses a Python interface and is invoked as follows:
+
+```
+python graffitize.pyc \
+          --in_graph        <path_to_in_graph.pb> \
+          --out_graph       <path_to_out_graph.pb> \
+          --inputs          <input_node_name> \
+          --outputs         <output_node_name> \
+          --input_shape     <H,W,C> \
+          --transforms      <list_of_transforms_to_apply>
+```
+
+For a full list of arguments and available transforms, use the help option: `python graffitize.pyc -h`.
+
+We also provide utility scripts for end-to-end ALT training and validation of Graffitist quantized networks on ImageNet.
+
+#### Training
+
+```
+python utils/train_imagenet_tf.py \
+          --data_dir        <path_to_tfrecords_dir> \
+          --ckpt_dir        <path_to_ckpt_meta_dir> \
+          --image_size      <size> \
+          --batch_size_t    <N>
+```
+
+#### Validation
+
+```
+python utils/validate_imagenet_tf.py \
+          --data_dir        <path_to_tfrecords_dir> \
+          --model_dir       <path_to_model_dir> \
+          --image_size      <size> \
+          --batch_size      <N>
+```
+
+#### Calibration set generation
+
+```
+python utils/validate_imagenet_tf.py \
+          --data_dir        <path_to_tfrecords_dir> \
+          --model_dir       <path_to_model_dir> \
+          --image_size      <size> \
+          --calib_set_size  <N> \
+          --gen_calib_set
+```
+
+[[back to ToC]](#contents)
+
+---
+
 ## Requirements
 
 Graffitist is packaged with custom quantization kernels (C++/CUDA) that are pre-compiled on the following configuration:
@@ -204,6 +256,21 @@ Graffitist is packaged with custom quantization kernels (C++/CUDA) that are pre-
 - Python 3.6
 - TensorFlow 1.12 (CPU or GPU)
 - CUDA 9.0, cuDNN 7 (if GPU)
+
+### Kernels
+
+To load the pre-compiled kernels, prepend the following code (update paths as necessary) to your Python scripts. For example, see the provided [validation script](#validation).
+```python
+import tensorflow as tf
+
+cpu_kernel_path = './kernels/quantize_ops.so'
+gpu_kernel_path = './kernels/quantize_ops_cuda.so'
+
+if tf.test.is_built_with_cuda() and tf.test.is_gpu_available(cuda_only=True):
+  tf.load_op_library(gpu_kernel_path)
+else:
+  tf.load_op_library(cpu_kernel_path)
+```
 
 ### Installation
 
@@ -247,24 +314,13 @@ The following NVIDIA® software is required to use TensorFlow with GPU support:
 - [CUPTI](http://docs.nvidia.com/cuda/cupti/) ships with the CUDA Toolkit.
 - [cuDNN SDK](https://developer.nvidia.com/cudnn) (>= 7.2)
 
-[[back to ToC]](#contents)
+#### Clone Graffitist
 
----
-
-## Python API
-
-Graffitist uses a Python frontend and is invoked as follows:
+Clone the master branch of Graffitist locally.
 ```
-python graffitize.pyc \
-    --in_graph <path_to_in_graph.pb> \
-    --out_graph <path_to_out_graph.pb> \
-    --inputs <input_node_name> \
-    --outputs <output_node_name> \
-    --input_shape <H,W,C> \
-    --transforms <list_of_transforms_to_apply>
+git clone https://github.com/Xilinx/graffitist.git
+cd ./graffitist
 ```
-
-To show a full list of available transforms, use the command option `-h`, like this: `python graffitize.pyc -h`.
 
 [[back to ToC]](#contents)
 
@@ -274,7 +330,7 @@ To show a full list of available transforms, use the command option `-h`, like t
 
 ### Prepare models
 
-If using one of the provided models, simply download and extract to `./models/` dir and proceed to [next step](#set-paths).
+To get started, we provide a set of standard networks including graph descriptions (`.pb`/`.meta`), pre-trained FP32 weights (`.ckpt`) and calibration datasets (`.npy`) with applied preprocessing. Both eval and training graphs are included (for static and retrain mode respectively). This is because training specific layers (`batch_normalization`, `dropout`, etc) behave differently in the two modes.
 
 |    Network     | Download    |
 |----------------|:-----------:|
@@ -291,6 +347,8 @@ If using one of the provided models, simply download and extract to `./models/` 
 | mobilenet_v2   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v2_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v2_slim_pretrained_train_2019-01-09.zip)
 | darknet19      | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.darknet19_dw2tf_pretrained_0313_0943.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.darknet19_dw2tf_pretrained_train_0313_0943.zip)
 
+If using one of the provided models, simply download and extract to `./models/` dir and proceed to [next step](#set-paths).
+
 If bringing your own model (BYOM), ensure the following files are saved out to `./models/my_model_dir/`:
 ```
 my_model.pb
@@ -301,7 +359,7 @@ my_model.ckpt.meta (only needed in retrain mode)
 calibration_set.npy
 ```
 
-The graph `.pb` is a serialized TensorFlow protocol buffer containing the nodes and edges. Refer [here](https://www.tensorflow.org/guide/extend/model_files) for details on TensorFlow protocol buffers.
+The graph `.pb` is a serialized TensorFlow protocol buffer containing the nodes and edges. Refer [here](https://www.tensorflow.org/guide/extend/model_files) for details on TensorFlow protocol buffers. Note that the input graph to Graffitist should NOT contain frozen weights, as they are read from a separate checkpoint.
 
 The `checkpoint` file points to the specific `.ckpt` to use.  For example:
 ```
@@ -310,9 +368,11 @@ all_model_checkpoint_paths: "my_model.ckpt"
 ```
 Refer [here](https://www.tensorflow.org/guide/saved_model#save_variables) for details on saving TensorFlow checkpoints.
 
-The metagraph `.meta` contains the graph and training metadata (e.g. variable collections, weight regularization). It is not necessary in static mode, but required in retrain mode. Refer [here](https://www.tensorflow.org/api_guides/python/meta_graph) for details on exporting TensorFlow metagraph.
+The metagraph `.meta` contains the graph and training metadata (e.g. variable collections, weight regularization). It is only required in retrain mode. Refer [here](https://www.tensorflow.org/api_guides/python/meta_graph) for details on exporting TensorFlow metagraph.
 
-The calibration set `.npy` contains N randomly sampled images with applied data pre-processing, stored as a numpy array of shape `[N, H, W, C]`.
+The calibration set `.npy` contains N randomly sampled images with applied data pre-processing, stored as a numpy array of shape `[N, H, W, C]`. See the included [validation script](#calibration-set-generation) for more details on generating a calibration set.
+
+UPDATE: [SavedModel](https://www.tensorflow.org/guide/saved_model) interface is on the way!
 
 ### Set paths
 
@@ -324,7 +384,7 @@ groot=`find -maxdepth 3 -name 'graffitize.pyc' -printf '%h\n'`
 mroot=`find -maxdepth 1 -name 'models'`
 ```
 
-To retrain for INT4, set `INT4_MODE` as follows (ignored for static mode):
+To retrain for INT4, set `INT4_MODE` as follows (ignored in static mode):
 ```
 INT4_MODE="1"
 ```
@@ -356,7 +416,7 @@ If BYOM, set config options based on your model (similar to the examples provide
 
 #### Recipe 1: Optimized inference graph
 
-This recipe applies various layer optimizations and pre-processing to generate a simplified inference graph (not yet quantized).
+This recipe applies various layer optimizations and pre-processing to generate a simplified inference graph (not quantized yet).
 ```
 python $groot/graffitize.pyc \
     --in_graph $in_graph \
@@ -407,7 +467,7 @@ python $groot/graffitize.pyc \
                  'quantize(is_training=True, weight_bits='$wb', activation_bits='$ab', layer_bits='$lb', relu_bits='$rb', avgpool_bits='$pb', avgpool_reciprocal_bits='$prb', first_layer='$first_layer', last_layer='$last_layer')'
 ```
 
-*Step 2:* Retrain. Once converged, ensure the `checkpoint` points to the most recent retrained ckpt.
+*Step 2:* Retrain. For the example networks, use the included [training script](#training). Once converged, ensure `checkpoint` points to the correct retrained ckpt.
 
 *Step 3:* Generate the equivalent quantized inference graph using retrained variables from previous step.
 ```
@@ -423,25 +483,6 @@ python $groot/graffitize.pyc \
                  'strip_unused_nodes' \
                  'preprocess_layers' \
                  'quantize(calibrate_quant_layers=False, weight_bits='$wb', activation_bits='$ab', layer_bits='$lb', relu_bits='$rb', avgpool_bits='$pb', avgpool_reciprocal_bits='$prb', first_layer='$first_layer', last_layer='$last_layer')'
-```
-
-[[back to ToC]](#contents)
-
----
-
-## Kernels
-
-To validate on the quantized network, first load the pre-compiled kernels by prepending the following code (fix paths as necessary) to your validation script:
-```python
-import tensorflow as tf
-
-cpu_kernel_path = 'graffitist/kernels/quantize_ops.so'
-gpu_kernel_path = 'graffitist/kernels/quantize_ops_cuda.so'
-
-if tf.test.is_built_with_cuda() and tf.test.is_gpu_available(cuda_only=True):
-  tf.load_op_library(gpu_kernel_path)
-else:
-  tf.load_op_library(cpu_kernel_path)
 ```
 
 [[back to ToC]](#contents)
