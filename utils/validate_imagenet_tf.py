@@ -65,7 +65,7 @@ def validate(val_filenames):
 
   if args.gen_calib_set:
     # No need to load the model to generate calibration dataset
-    with tf.Session(graph=tf.Graph()) as sess:
+    with tf.compat.v1.Session(graph=tf.Graph()) as sess:
       features, _, _ = im_utils.dataset_input_fn(val_filenames, args.model_dir, args.image_size, args.calib_set_size, num_threads, shuffle=True, is_training=False)
       input_features = sess.run(features)
       np.save(args.model_dir+'calibration_set', input_features)
@@ -81,26 +81,26 @@ def validate(val_filenames):
       # Remove any global_step digits for meta path
       meta_path = re.sub('.ckpt-\d+', '.ckpt', ckpt_path) + '.meta'
 
-    with tf.Session(graph=tf.Graph()) as sess:
+    with tf.compat.v1.Session(graph=tf.Graph()) as sess:
       # 1) Load from frozen model.pb
-      if tf.gfile.Exists(args.model_dir) and re.match(".*frozen.*\.pb", args.model_dir):
+      if tf.io.gfile.exists(args.model_dir) and re.match(".*frozen.*\.pb", args.model_dir):
         print("Loading frozen model from '{}'".format(args.model_dir))
-        graph_def = tf.GraphDef()
-        with tf.gfile.GFile(args.model_dir, 'rb') as f:
+        graph_def = tf.compat.v1.GraphDef()
+        with tf.io.gfile.GFile(args.model_dir, 'rb') as f:
           graph_def.ParseFromString(f.read())
         tf.import_graph_def(graph_def, name='')
 
       # 2) Load from .ckpt and .pb
-      elif ckpt and tf.gfile.Exists(ckpt_path+'.index') and tf.gfile.Exists(args.model_dir) and \
+      elif ckpt and tf.io.gfile.exists(ckpt_path+'.index') and tf.io.gfile.exists(args.model_dir) and \
            re.match(".*.pb", args.model_dir):
         print("Loading model from '{}'".format(args.model_dir))
         print("Loading weights from '{}'".format(ckpt_path))
-        graph_def = tf.GraphDef()
-        with tf.gfile.GFile(args.model_dir, 'rb') as f:
+        graph_def = tf.compat.v1.GraphDef()
+        with tf.io.gfile.GFile(args.model_dir, 'rb') as f:
           graph_def.ParseFromString(f.read())
         tf.import_graph_def(graph_def, name='')
         var_list = {}
-        reader = tf.train.NewCheckpointReader(ckpt_path)
+        reader = tf.compat.v1.train.NewCheckpointReader(ckpt_path)
         for key in reader.get_variable_to_shape_map():
           # Look for all variables in ckpt that are used by the graph
           try:
@@ -110,29 +110,29 @@ def validate(val_filenames):
             # 'global_step' or a similar housekeeping element) so skip it.
             continue
           var_list[key] = tensor
-        saver = tf.train.Saver(var_list=var_list)
+        saver = tf.compat.v1.train.Saver(var_list=var_list)
         saver.restore(sess, ckpt_path)
 
       # 3) Load from .ckpt and .meta
-      elif ckpt and tf.gfile.Exists(ckpt_path+'.index') and tf.gfile.Exists(meta_path):
+      elif ckpt and tf.io.gfile.exists(ckpt_path+'.index') and tf.io.gfile.exists(meta_path):
         print("Loading model from '{}'".format(meta_path))
         print("Loading weights from '{}'".format(ckpt_path))
-        new_saver = tf.train.import_meta_graph(meta_path, clear_devices=True)
+        new_saver = tf.compat.v1.train.import_meta_graph(meta_path, clear_devices=True)
         new_saver.restore(sess, ckpt_path)
 
       # 4) Load from saved_model.pb and variables
       elif tf.saved_model.loader.maybe_saved_model_directory(args.model_dir) and \
-          tf.gfile.Exists(saved_model_path) and tf.gfile.Exists(saved_model_var_path):
+          tf.io.gfile.exists(saved_model_path) and tf.io.gfile.exists(saved_model_var_path):
         print("Loading model from '{}'".format(saved_model_path))
         print("Loading weights from '{}'".format(saved_model_var_path))
         tf.saved_model.loader.load(sess,
-                     [tf.saved_model.tag_constants.TRAINING],
+                     [tf.saved_model.tag_constants.SERVING],
                      args.model_dir)
 
       else:
         raise ValueError("No model found!")
 
-      g = tf.get_default_graph()
+      g = tf.compat.v1.get_default_graph()
 
       if re.match('.*resnet_v1_50_slim.*', args.model_dir):
         input = g.get_tensor_by_name("input:0")
@@ -173,6 +173,9 @@ def validate(val_filenames):
       elif re.match('.*inception_v1_bn_keras.*', args.model_dir):
         input = g.get_tensor_by_name("input_1:0")
         output = g.get_tensor_by_name("Predictions/Softmax:0")
+      elif re.match('.*resnet_v1p5_50_keras.*', args.model_dir):
+        input = g.get_tensor_by_name("input_1:0")
+        output = g.get_tensor_by_name("activation_49/Softmax:0")
       elif re.match('.*caffe2tf.*', args.model_dir):
         input = g.get_tensor_by_name("input:0")
         output = g.get_tensor_by_name("prob:0")

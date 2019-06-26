@@ -9,9 +9,7 @@
 
 Graffitist is a flexible and scalable framework built on top of TensorFlow to process low-level graph descriptions of deep neural networks (DNNs) for accurate and efficient inference on fixed-point hardware. It comprises of a (growing) library of transforms to apply various neural network compression techniques such as quantization, pruning, and compression. Each transform consists of unique pattern matching and manipulation algorithms that when run sequentially produce an optimized output graph.
 
-<img src="docs/img/graffitist_flow.PNG" width="100%">
-
-Graffitist stands on the shoulders of giants, and the interface is inspired in part by [earlier](https://github.com/tensorflow/tensorflow/blob/r1.12/tensorflow/tools/graph_transforms/README.md) [tools](https://github.com/tensorflow/tensorflow/blob/r1.12/tensorflow/contrib/quantize/README.md) from TensorFlow. It is developed with tight integration to the static data-flow graph semantics of TensorFlow. This comes with many benefits of a mature ML framework, such as strong low-level graph processing API, accelerated kernels for bit-accurate emulation, extensive pretrained model-zoo, large-scale distributed training, production readiness, clean documentation and great support from TensorFlow developers and the open-source community.
+<img src="docs/img/graffitist_flow.gif" width="100%">
 
 Graffitist uses a novel quantization threshold training technique called **A**daptive-Gradient **L**og-domain **T**hreshold Training (**ALT**) which results in highly accurate and efficient 8-bit and 4-bit quantized networks, amenable to most generic fixed-point hardware. For details, please refer to our paper:
 
@@ -23,6 +21,8 @@ Graffitist uses a novel quantization threshold training technique called **A**da
 [Chris Dick](mailto:chrisd@xilinx.com),
 <br>
 *arXiv preprint* arXiv:1903.08066, 2019.
+
+Graffitist stands on the shoulders of giants, and the interface is inspired in part by [earlier](https://github.com/tensorflow/tensorflow/blob/r1.12/tensorflow/tools/graph_transforms/README.md) [tools](https://github.com/tensorflow/tensorflow/blob/r1.12/tensorflow/contrib/quantize/README.md) from TensorFlow. It is developed with tight integration to the static data-flow graph semantics of TensorFlow. This comes with many benefits of a mature ML framework, such as strong low-level graph processing API, accelerated kernels for bit-accurate emulation, extensive pretrained model-zoo, large-scale distributed training, production readiness, clean documentation and great support from TensorFlow developers and the open-source community.
 
 ## Contents
 
@@ -41,8 +41,8 @@ Graffitist uses a novel quantization threshold training technique called **A**da
    * [Kernels](#kernels)
    * [Installation](#installation)
       * [Install Anaconda3](#install-anaconda3)
-      * [Install TensorFlow 1.12](#install-tensorflow-112)
-      * [<em>(Optional)</em> Install CUDA 9.0, cuDNN 7](#optional-install-cuda-90-cudnn-7)
+      * [Install TensorFlow 1.14](#install-tensorflow-114)
+      * [<em>(Optional)</em> Install CUDA 10.0, cuDNN 7](#optional-install-cuda-100-cudnn-7)
       * [Clone Graffitist](#clone-graffitist)
 * [How to run](#how-to-run)
    * [Prepare models](#prepare-models)
@@ -254,8 +254,8 @@ python utils/validate_imagenet_tf.py \
 Graffitist is packaged with custom quantization kernels (C++/CUDA) that are pre-compiled on the following configuration:
 - Ubuntu 16.04
 - Python 3.6
-- TensorFlow 1.12 (CPU or GPU)
-- CUDA 9.0, cuDNN 7 (if GPU)
+- TensorFlow 1.14 (CPU or GPU)
+- CUDA 10.0, cuDNN 7 (if GPU)
 
 ### Kernels
 
@@ -276,43 +276,40 @@ else:
 
 #### Install Anaconda3
 
-Download and install Anaconda3(-5.3.1).
+Download and install Anaconda3.
 ```
-wget https://repo.anaconda.com/archive/Anaconda3-5.3.1-Linux-x86_64.sh
-bash ./Anaconda3-5.3.1-Linux-x86_64.sh
-```
-
-When prompted, allow Anaconda to setup your `.bashrc` appropriately. Then source it to load the `conda` installation path.
-```
-source ~/.bashrc
+wget https://repo.anaconda.com/archive/Anaconda3-2019.03-Linux-x86_64.sh
+bash ./Anaconda3-2019.03-Linux-x86_64.sh
 ```
 
-Create a new conda environment `venv` with Python 3.6 interpreter and activate it.
+When prompted, allow the installer to initialize Anaconda3 and setup your `.bashrc`. Then close and open a new bash shell to source the installation correctly.
+
+Create a new conda environment `tf1.14` with Python 3.6 interpreter and activate it.
 ```
-conda create -n venv pip python=3.6
-conda activate venv
+conda create -n tf1.14 pip python=3.6
+conda activate tf1.14
 ```
 
-#### Install TensorFlow 1.12
+#### Install TensorFlow 1.14
 
 CPU-only:
 ```
-pip install --ignore-installed --upgrade https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-1.12.0-cp36-cp36m-linux_x86_64.whl
+pip install --ignore-installed --upgrade https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-1.14.0-cp36-cp36m-linux_x86_64.whl
 ```
 
 GPU:
 ```
-pip install --ignore-installed --upgrade https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.12.0-cp36-cp36m-linux_x86_64.whl
+pip install --ignore-installed --upgrade https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.14.0-cp36-cp36m-linux_x86_64.whl
 ```
 
-#### *(Optional)* Install CUDA 9.0, cuDNN 7
+#### *(Optional)* Install CUDA 10.0, cuDNN 7
 
 The following NVIDIA® software is required to use TensorFlow with GPU support:
 
-- [NVIDIA® GPU drivers](https://www.nvidia.com/drivers) CUDA 9.0 requires 384.x or higher.
-- [CUDA® Toolkit](https://developer.nvidia.com/cuda-zone) TensorFlow supports CUDA 9.0.
+- [NVIDIA® GPU drivers](https://www.nvidia.com/drivers) CUDA 10.0 requires 410.x or higher.
+- [CUDA® Toolkit](https://developer.nvidia.com/cuda-zone) TensorFlow supports CUDA 10.0 (TensorFlow >= 1.13.0).
 - [CUPTI](http://docs.nvidia.com/cuda/cupti/) ships with the CUDA Toolkit.
-- [cuDNN SDK](https://developer.nvidia.com/cudnn) (>= 7.2)
+- [cuDNN SDK](https://developer.nvidia.com/cudnn) (>= 7.4.1)
 
 #### Clone Graffitist
 
@@ -378,7 +375,7 @@ UPDATE: [SavedModel](https://www.tensorflow.org/guide/saved_model) interface is 
 
 Activate conda env and set paths:
 ```
-conda activate venv
+conda activate tf1.14
 
 groot=`find -maxdepth 3 -name 'graffitize.pyc' -printf '%h\n'`
 mroot=`find -maxdepth 1 -name 'models'`
@@ -496,7 +493,7 @@ python $groot/graffitize.pyc \
 | `RuntimeError: Bad magic number in .pyc file` | Use correct Python version; see [Requirements](#requirements)
 | `tensorflow.python.framework.errors_impl.NotFoundError: graffitist/kernels/quantize_ops.so: undefined symbol: _ZN10tensorflow22CheckNotInComputeAsyncEPNS_15OpKernelContextEPKc` | Use correct TensorFlow version; see [Requirements](#requirements)
 | `tensorflow.python.framework.errors_impl.NotFoundError: graffitist/kernels/quantize_ops_cuda.so: undefined symbol: _ZN10tensorflow22CheckNotInComputeAsyncEPNS_15OpKernelContextEPKc` | Use correct TensorFlow version; see [Requirements](#requirements)
-| `ImportError: libcublas.so.9.0: cannot open shared object file: No such file or directory` | Use correct CUDA version with TF for GPU; see [Requirements](#requirements)
+| `ImportError: libcublas.so.10.0: cannot open shared object file: No such file or directory` | Use correct CUDA version with TF for GPU; see [Requirements](#requirements)
 | `RecursionError: maximum recursion depth exceeded in comparison` | Stack limit set to 3k (default: 1k) to avoid stack overflows for lack of tail-call optimization in Python; [get in touch](https://github.com/Xilinx/graffitist/issues/new)
 
 [[back to ToC]](#contents)

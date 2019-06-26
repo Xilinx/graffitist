@@ -105,7 +105,7 @@ def _crop(image, offset_height, offset_width, crop_height, crop_width):
           tf.greater_equal(original_shape[1], crop_width)),
       ['Crop size greater than the image size.'])
 
-  offsets = tf.to_int32(tf.stack([offset_height, offset_width, 0]))
+  offsets = tf.cast(tf.stack([offset_height, offset_width, 0]), tf.int32)
 
   # Use tf.slice instead of crop_to_bounding box as it accepts tensors to
   # define the crop size.
@@ -261,8 +261,8 @@ def _smallest_size_at_least(height, width, smallest_side):
   scale = tf.cond(tf.greater(height, width),
                   lambda: smallest_side / width,
                   lambda: smallest_side / height)
-  new_height = tf.to_int32(tf.rint(height * scale))
-  new_width = tf.to_int32(tf.rint(width * scale))
+  new_height = tf.cast(tf.math.rint(height * scale), tf.int32)
+  new_width = tf.cast(tf.math.rint(width * scale), tf.int32)
   return new_height, new_width
 
 def _aspect_preserving_resize(image, smallest_side):
@@ -281,7 +281,7 @@ def _aspect_preserving_resize(image, smallest_side):
   width = shape[1]
   new_height, new_width = _smallest_size_at_least(height, width, smallest_side)
   image = tf.expand_dims(image, 0)
-  resized_image = tf.image.resize_bilinear(image, [new_height, new_width],
+  resized_image = tf.compat.v1.image.resize_bilinear(image, [new_height, new_width],
                                            align_corners=False)
   resized_image = tf.squeeze(resized_image)
   resized_image.set_shape([None, None, 3])
@@ -453,7 +453,7 @@ def inception_preprocess_input_fn(image, output_height, output_width, is_trainin
       image = tf.image.convert_image_dtype(image, dtype=tf.float32)   # Returns fp32 (with range [0, 1))
     image = tf.image.central_crop(image, central_fraction=0.875)   # Crop central region containing 87.5% of original image
     image = tf.expand_dims(image, 0)
-    image = tf.image.resize_bilinear(image, [output_height, output_width], align_corners=False)
+    image = tf.compat.v1.image.resize_bilinear(image, [output_height, output_width], align_corners=False)
     image = tf.squeeze(image, [0])
     image = tf.subtract(image, 0.5)
     image = tf.multiply(image, 2.0)
@@ -530,7 +530,7 @@ def darknet_preprocess_input_fn(image, output_height, output_width, is_training=
       image = tf.image.convert_image_dtype(image, dtype=tf.float32)   # Returns fp32 (with range [0, 1))
     image = tf.image.central_crop(image, central_fraction=0.875)   # Crop central region containing 87.5% of original image
     image = tf.expand_dims(image, 0)
-    image = tf.image.resize_bilinear(image, [output_height, output_width], align_corners=False)
+    image = tf.compat.v1.image.resize_bilinear(image, [output_height, output_width], align_corners=False)
     image = tf.squeeze(image, [0])
   return image
 
@@ -540,10 +540,10 @@ def dataset_input_fn(filenames, model_dir, image_size, batch_size, num_threads, 
   # protocol buffer, and perform any additional per-record preprocessing.
   def _parse_function(example_proto):
     features = {
-      'image/encoded': tf.FixedLenFeature((), tf.string, default_value=""),
-      'image/class/label': tf.FixedLenFeature((), tf.int64, default_value=tf.zeros([], dtype=tf.int64))
+      'image/encoded': tf.io.FixedLenFeature((), tf.string, default_value=""),
+      'image/class/label': tf.io.FixedLenFeature((), tf.int64, default_value=tf.zeros([], dtype=tf.int64))
     }
-    parsed_features = tf.parse_single_example(example_proto, features)
+    parsed_features = tf.io.parse_single_example(example_proto, features)
   
     image = tf.image.decode_jpeg(parsed_features['image/encoded'], channels=3)  # Returns uint8 (with range [0, 255])
     if re.match('.*inception.*slim.*', model_dir):
@@ -556,6 +556,9 @@ def dataset_input_fn(filenames, model_dir, image_size, batch_size, num_threads, 
       # Center crop, aspect preserving resize, mean subtraction
       image = vgg_preprocess_input_fn(image, image_size, image_size, is_training)
     elif re.match('.*resnet_v1.*slim.*', model_dir):
+      # Center crop, aspect preserving resize, mean subtraction
+      image = vgg_preprocess_input_fn(image, image_size, image_size, is_training)
+    elif re.match('.*resnet_v1p5.*keras.*', model_dir):
       # Center crop, aspect preserving resize, mean subtraction
       image = vgg_preprocess_input_fn(image, image_size, image_size, is_training)
     elif re.match('.*darknet19.*', model_dir):
@@ -598,9 +601,9 @@ def dataset_input_fn(filenames, model_dir, image_size, batch_size, num_threads, 
     dataset = dataset.repeat(num_epochs)
     dataset = dataset.prefetch(buffer_size=1)
     if initializable:
-      iterator = dataset.make_initializable_iterator()
+      iterator = tf.compat.v1.data.make_initializable_iterator(dataset)
     else:
-      iterator = dataset.make_one_shot_iterator()
+      iterator = tf.compat.v1.data.make_one_shot_iterator(dataset)
     features, labels = iterator.get_next()
   return features, labels, iterator
 

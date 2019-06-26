@@ -136,7 +136,7 @@ def train(train_filenames, val_filenames):
   adam_epsilon = 1e-08
 
   # Build model
-  tf.reset_default_graph()
+  tf.compat.v1.reset_default_graph()
 
   # Fetch ckpt/meta paths from ckpt_dir
   ckpt = tf.train.get_checkpoint_state(os.path.dirname(args.ckpt_dir))
@@ -151,13 +151,13 @@ def train(train_filenames, val_filenames):
     meta_path = args.meta_path
 
   # Load model from .meta
-  if tf.gfile.Exists(ckpt_path+'.index') and tf.gfile.Exists(meta_path):
+  if tf.io.gfile.exists(ckpt_path+'.index') and tf.io.gfile.exists(meta_path):
     print("Loading model from '{}'".format(meta_path))
-    saver = tf.train.import_meta_graph(meta_path, clear_devices=True)
+    saver = tf.compat.v1.train.import_meta_graph(meta_path, clear_devices=True)
   else:
     raise ValueError("No model found!")
 
-  g = tf.get_default_graph()
+  g = tf.compat.v1.get_default_graph()
 
   if re.match('.*resnet_v1_50_slim.*', args.ckpt_dir):
     input = g.get_tensor_by_name("input:0")
@@ -207,21 +207,25 @@ def train(train_filenames, val_filenames):
     input = g.get_tensor_by_name("darknet19/net1:0")
     logits = g.get_tensor_by_name("darknet19/softmax1/Squeeze:0")
     output = g.get_tensor_by_name("darknet19/softmax1/Softmax:0")
+  elif re.match('.*resnet_v1p5_50_keras.*', args.ckpt_dir):
+    input = g.get_tensor_by_name("input_1:0")
+    logits = g.get_tensor_by_name("fc1000/BiasAdd:0")
+    output = g.get_tensor_by_name("activation_49/Softmax:0")
   else:
     raise ValueError("Model input/outputs unknown!")
 
   try:
     freeze_bn = g.get_tensor_by_name("freeze_bn:0")
   except:
-    freeze_bn = tf.placeholder(tf.bool, shape=(), name='freeze_bn')
+    freeze_bn = tf.compat.v1.placeholder(tf.bool, shape=(), name='freeze_bn')
 
   # Collect batch norm update ops
   # CAUTION: Do this before adding ema, since that uses AssignMovingAvg nodes too.
   batchnorm_updates = [ g.get_tensor_by_name(node.name + ':0') for node in g.as_graph_def().node if 'AssignMovingAvg' in node.name.split('/')[-1] ]
 
   # Assign weights to opt_wt and thresholds to opt_th
-  var_list_wt = list(filter(lambda x: 'threshold' not in x.name, tf.trainable_variables()))
-  var_list_th = list(filter(lambda x: 'threshold' in x.name, tf.trainable_variables()))
+  var_list_wt = list(filter(lambda x: 'threshold' not in x.name, tf.compat.v1.trainable_variables()))
+  var_list_th = list(filter(lambda x: 'threshold' in x.name, tf.compat.v1.trainable_variables()))
 
   # Build dicts for incremental threshold freezing
   freeze_th_dict = {}
@@ -241,28 +245,28 @@ def train(train_filenames, val_filenames):
   print("Adding training ops (loss, global_step, train_op, init_op, summary_op etc)")
 
   # Placeholder to feed labels for computing loss and accuracy
-  labels = tf.placeholder(tf.int64, shape=None, name='labels')
+  labels = tf.compat.v1.placeholder(tf.int64, shape=None, name='labels')
 
   with tf.name_scope('training'):
     # Create a variable to count the number of train() calls. This equals the
     # number of updates applied to the variables.
-    global_step = tf.train.get_or_create_global_step()
+    global_step = tf.compat.v1.train.get_or_create_global_step()
 
     # Decay the learning rate exponentially based on the number of steps.
-    lr_wt = tf.train.exponential_decay(initial_lr_wt, global_step, lr_wt_decay_steps, lr_wt_decay_factor, staircase=True)
-    lr_th = tf.train.exponential_decay(initial_lr_th, global_step, lr_th_decay_steps, lr_th_decay_factor, staircase=True)
+    lr_wt = tf.compat.v1.train.exponential_decay(initial_lr_wt, global_step, lr_wt_decay_steps, lr_wt_decay_factor, staircase=True)
+    lr_th = tf.compat.v1.train.exponential_decay(initial_lr_th, global_step, lr_th_decay_steps, lr_th_decay_factor, staircase=True)
 
     # Create optimizers that performs gradient descent on weights and thresholds.
-    opt_wt = tf.train.AdamOptimizer(lr_wt, adam_beta1, adam_beta2, adam_epsilon)
-    opt_th = tf.train.AdamOptimizer(lr_th, adam_beta1, adam_beta2, adam_epsilon)
+    opt_wt = tf.compat.v1.train.AdamOptimizer(lr_wt, adam_beta1, adam_beta2, adam_epsilon)
+    opt_th = tf.compat.v1.train.AdamOptimizer(lr_th, adam_beta1, adam_beta2, adam_epsilon)
 
     # Softmax cross entropy loss with logits (uses sparse labels instead of one-hot encoded vectors)
-    sce_loss = tf.losses.sparse_softmax_cross_entropy(labels, logits)
+    sce_loss = tf.compat.v1.losses.sparse_softmax_cross_entropy(labels, logits)
 
     # In case of regularization loss, add here
     losses = []
     losses += [sce_loss]
-    losses += tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    losses += tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.REGULARIZATION_LOSSES)
 
     total_loss = tf.add_n(losses, name='total_loss')
 
@@ -301,7 +305,7 @@ def train(train_filenames, val_filenames):
       train_op_w_bn_updates = tf.identity(train_op, name='train_op_w_bn_updates')
 
     # Build an initialization operation to run below.
-    init_op = tf.global_variables_initializer()
+    init_op = tf.compat.v1.global_variables_initializer()
 
   with tf.name_scope('accuracy'):
     # Train accuracy
@@ -320,35 +324,35 @@ def train(train_filenames, val_filenames):
       val_labels_tensor = val_labels_tensor - 1
 
   # Create a new saver with all variables to save .meta/.ckpt every best_val_acc
-  new_saver = tf.train.Saver()
+  new_saver = tf.compat.v1.train.Saver()
 
   # SUMMARIES for Tensorboard
   # Attach a scalar summary to track the learning rate.
-  tf.summary.scalar('learning_rates/lr_wt', lr_wt)
-  tf.summary.scalar('learning_rates/lr_th', lr_th)
+  tf.compat.v1.summary.scalar('learning_rates/lr_wt', lr_wt)
+  tf.compat.v1.summary.scalar('learning_rates/lr_th', lr_th)
 
   # Attach a scalar summmary to total loss and it's averaged version.
   for l in [sce_loss, total_loss]:
     loss_name = l.op.name
     # Name each loss as '(raw)' and name the moving average version of the
     # loss as the original loss name.
-    tf.summary.scalar('losses/'+loss_name+'_raw', l)
-    tf.summary.scalar('losses/'+loss_name+'_ema', ema_l.average(l))
+    tf.compat.v1.summary.scalar('losses/'+loss_name+'_raw', l)
+    tf.compat.v1.summary.scalar('losses/'+loss_name+'_ema', ema_l.average(l))
 
   # Attach a scalar summary to track the thresholds.
   if LEARN_TH and var_list_th:
     for th in var_list_th:
       th_name = th.name
-      tf.summary.scalar('thresholds/'+th_name+'_raw', th)
-      tf.summary.scalar('thresholds/'+th_name+'_ema', ema_th.average(th))
+      tf.compat.v1.summary.scalar('thresholds/'+th_name+'_raw', th)
+      tf.compat.v1.summary.scalar('thresholds/'+th_name+'_ema', ema_th.average(th))
 
   # Build the summary operation based on the TF collection of Summaries.
-  summary_op = tf.summary.merge_all()
+  summary_op = tf.compat.v1.summary.merge_all()
 
   # Output dir
   train_dir = os.path.join(os.path.dirname(args.ckpt_dir), 'train_dir_%03d'%(exp_id))
-  if tf.gfile.Exists(train_dir):
-      tf.gfile.DeleteRecursively(train_dir)
+  if tf.io.gfile.exists(train_dir):
+      tf.io.gfile.rmtree(train_dir)
   train_dir += '/'
   new_ckpt_path = train_dir+ckpt_path.split('/')[-1]
   new_meta_path = new_ckpt_path+'.meta'
@@ -356,7 +360,7 @@ def train(train_filenames, val_filenames):
   print("Train dir: '{}'".format(train_dir))
 
   # Summary writers
-  train_writer = tf.summary.FileWriter(train_dir + '/train', g)
+  train_writer = tf.compat.v1.summary.FileWriter(train_dir + '/train', g)
 
   # Meters to keep track of training progress
   batch_time_t = im_utils.AverageMeter()
@@ -371,7 +375,7 @@ def train(train_filenames, val_filenames):
 
   best_val_acc = 0.0
 
-  with tf.Session(graph=g) as sess:
+  with tf.compat.v1.Session(graph=g) as sess:
     # Initialize new variables
     print("Initializing global variables")
     sess.run(init_op)
