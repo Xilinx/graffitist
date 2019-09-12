@@ -185,7 +185,7 @@ def train(train_filenames, val_filenames):
     output = g.get_tensor_by_name("InceptionV3/Predictions/Softmax:0")
   elif re.match('.*inception_v4_slim.*', args.ckpt_dir):
     input = g.get_tensor_by_name("input:0")
-    logits = g.get_tensor_by_name("InceptionV4/Logits/Logits/Cast_3:0")
+    logits = g.get_tensor_by_name("InceptionV4/Logits/Logits/BiasAdd_biasadd_quant/LinearQuant:0")
     output = g.get_tensor_by_name("InceptionV4/Logits/Predictions:0")
   elif re.match('.*mobilenet_v1_slim.*', args.ckpt_dir):
     input = g.get_tensor_by_name("input:0")
@@ -440,7 +440,7 @@ def train(train_filenames, val_filenames):
 
       # Map predicted labels synset ordering between ILSVRC and darknet
       if re.match('.*darknet19.*', args.ckpt_dir):
-        input_labels = map_darknet_labels(input_labels, 'ilsvrc2darknet')
+        input_labels = im_utils.map_darknet_labels(input_labels, 'ilsvrc2darknet')
 
       loss_value, summary, step, preds_5, th_grads_vars = sess.run([train_op if freeze_bn_train else train_op_w_bn_updates,
                                                      summary_op, global_step, preds_top_5, th_grads_and_vars],
@@ -516,7 +516,7 @@ def train(train_filenames, val_filenames):
 
           # Map predicted labels synset ordering between ILSVRC and darknet
           if re.match('.*darknet19.*', args.ckpt_dir):
-            input_labels = map_darknet_labels(input_labels, 'ilsvrc2darknet')
+            input_labels = im_utils.map_darknet_labels(input_labels, 'ilsvrc2darknet')
 
           preds_5 = sess.run(preds_top_5, feed_dict={input: input_features, labels: input_labels, freeze_bn: True})
           end_time = time.time()

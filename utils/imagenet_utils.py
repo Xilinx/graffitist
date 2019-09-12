@@ -254,9 +254,9 @@ def _smallest_size_at_least(height, width, smallest_side):
   """
   smallest_side = tf.convert_to_tensor(smallest_side, dtype=tf.int32)
 
-  height = tf.to_float(height)
-  width = tf.to_float(width)
-  smallest_side = tf.to_float(smallest_side)
+  height = tf.cast(height, tf.float32)
+  width = tf.cast(width, tf.float32)
+  smallest_side = tf.cast(smallest_side, tf.float32)
 
   scale = tf.cond(tf.greater(height, width),
                   lambda: smallest_side / width,
@@ -467,7 +467,7 @@ def vgg_preprocess_input_fn(image, output_height, output_width, is_training=Fals
     image = _aspect_preserving_resize(image, resize_side)
     image = _random_crop([image], output_height, output_width)[0]
     image.set_shape([output_height, output_width, 3])
-    image = tf.to_float(image)
+    image = tf.cast(image, tf.float32)
     image = tf.image.random_flip_left_right(image)
     image = _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
   else:
@@ -475,7 +475,7 @@ def vgg_preprocess_input_fn(image, output_height, output_width, is_training=Fals
     image = _aspect_preserving_resize(image, resize_side)
     image = _central_crop([image], output_height, output_width)[0]
     image.set_shape([output_height, output_width, 3])
-    image = tf.to_float(image)
+    image = tf.cast(image, tf.float32)
     image = _mean_image_subtraction(image, [_R_MEAN, _G_MEAN, _B_MEAN])
   return image
 
@@ -485,7 +485,7 @@ def caffe2tf_preprocess_input_fn(image, output_height, output_width, is_training
     image = _aspect_preserving_resize(image, resize_side)
     image = _random_crop([image], output_height, output_width)[0]
     image.set_shape([output_height, output_width, 3])
-    image = tf.to_float(image)
+    image = tf.cast(image, tf.float32)
     image = tf.image.random_flip_left_right(image)
     image = tf.reverse(image, axis=[-1])   # RGB -> BGR ;  image dims: (H, W, C)
     image = _mean_image_subtraction(image, [_B_MEAN, _G_MEAN, _R_MEAN])
@@ -494,7 +494,7 @@ def caffe2tf_preprocess_input_fn(image, output_height, output_width, is_training
     image = _aspect_preserving_resize(image, resize_side)
     image = _central_crop([image], output_height, output_width)[0]
     image.set_shape([output_height, output_width, 3])
-    image = tf.to_float(image)
+    image = tf.cast(image, tf.float32)
     image = tf.reverse(image, axis=[-1])   # RGB -> BGR ;  image dims: (H, W, C)
     image = _mean_image_subtraction(image, [_B_MEAN, _G_MEAN, _R_MEAN])
   return image
@@ -503,7 +503,7 @@ def inception_caffe2tf_preprocess_input_fn(image, output_height, output_width, i
   if is_training:
     raise ValueError('Training mode data preprocessing not implemented!')
   else:
-    image = tf.to_float(image)
+    image = tf.cast(image, tf.float32)
     image = tf.image.central_crop(image, central_fraction=0.875)
     image = tf.image.resize_images(image, [output_height, output_width])  # Default = bilinear
     image = tf.reverse(image, axis=[-1])   # RGB -> BGR ;  image dims: (H, W, C)
@@ -514,7 +514,7 @@ def mobilenet_caffe2tf_preprocess_input_fn(image, output_height, output_width, i
   if is_training:
     raise ValueError('Training mode data preprocessing not implemented!')
   else:
-    image = tf.to_float(image)
+    image = tf.cast(image, tf.float32)
     image = tf.image.central_crop(image, central_fraction=0.875)
     image = tf.image.resize_images(image, [output_height, output_width])  # Default = bilinear
     image = tf.reverse(image, axis=[-1])   # RGB -> BGR ;  image dims: (H, W, C)

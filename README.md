@@ -11,14 +11,14 @@ Graffitist is a flexible and scalable framework built on top of TensorFlow to pr
 
 <img src="docs/img/graffitist_flow.gif" width="100%">
 
-Graffitist uses a novel quantization threshold training technique called **A**daptive-Gradient **L**og-domain **T**hreshold Training (**ALT**) which results in highly accurate and efficient 8-bit and 4-bit quantized networks, amenable to most generic fixed-point hardware. For details, please refer to our paper:
+Graffitist uses a novel technique for training quantization thresholds (TQT) using standard backpropagation and gradient descent, which results in highly accurate and efficient 8-bit and 4-bit quantized networks amenable to most generic fixed-point hardware. For details, please refer to our paper:
 
-**[Trained Uniform Quantization for Accurate and Efficient Neural Network Inference on Fixed-Point Hardware](https://arxiv.org/abs/1903.08066)**,
+**[Trained Quantization Thresholds for Accurate and Efficient Fixed-Point Inference of Deep Neural Networks](https://arxiv.org/abs/1903.08066)**,
 <br>
 [Sambhav R. Jain](mailto:sambhav@alumni.stanford.edu),
 [Albert Gural](mailto:agural@alumni.stanford.edu),
 [Michael Wu](mailto:miwu@xilinx.com),
-[Chris Dick](mailto:chrisd@xilinx.com),
+[Chris H. Dick](mailto:chrisd@xilinx.com),
 <br>
 *arXiv preprint* arXiv:1903.08066, 2019.
 
@@ -63,7 +63,7 @@ Graffitist allows for quantization in two modes:
 
 1. **Static Mode.** Quantization thresholds (hence scale factors) are determined based on statistics of activations derived from a *calibration dataset*^. This results in quantized performance (INT8) that is usually competitive with floating-point baselines (FP32) without retraining. Note that while calibration can run on CPU within tens of minutes, use of GPU is recommended due to its ~O(n^2) runtime complexity.
 
-1. **Retrain Mode.** Quantization thresholds and weights are simultaneously trained (ALT method) for improved accuracy and further reduced precision (e.g. INT4). This approach yields highly accurate and compact DNN implementations on a fixed-point target. In many cases, INT8 retrained networks match FP32 accuracy while INT4 retrained networks reach within 1-3% of it depending on network topology. Recovery is achieved within 5 epochs of ALT retraining.
+1. **Retrain Mode.** Quantization thresholds and weights are simultaneously trained (TQT method) for improved accuracy and further reduced precision (e.g. INT4). This approach yields highly accurate and compact DNN implementations on a fixed-point target. In many cases, INT8 retrained networks match FP32 accuracy while INT4 retrained networks reach within 1-3% of it depending on network topology. Recovery is achieved within 5 epochs of TQT.
 
 *^small randomly chosen subset of the validation set with appropriate pre-processing applied*
 
@@ -79,7 +79,7 @@ For simplicity and ease of mapping on generic fixed-point hardware, the quantiza
 
 - compute: `Conv2D`, `MatMul`, `DepthwiseConv2dNative`
 - normalization: `FusedBatchNorm`
-- activation: `Relu`, `Relu6`, `Maximum` (for leaky-relu)
+- activation: `Relu`, `Relu6`, `LeakyRelu`, `Maximum` (for leaky-relu)
 - scale preserving: `ConcatV2`, `BiasAdd`, `Add` (eltwise-add), `Maximum` (for leaky-relu)
 - pool: `MaxPool`, `AvgPool`
 - classifier: `Softmax`
@@ -105,7 +105,7 @@ For simplicity and ease of mapping on generic fixed-point hardware, the quantiza
 - compute layers are quantized as q<sub>8</sub>( q<sub>16</sub>( *sum*( q<sub>8/4</sub>(**w**)\*q<sub>8</sub>(**x**) ) ) + q<sub>16</sub>(**b**) )
 - leaky-relu is quantized as q<sub>8</sub>( *max*( q<sub>16</sub>(**x**), q<sub>16</sub>( q<sub>16</sub>(**a**)\*q<sub>16</sub>(**x**) ) ) )
 - eltwise-add is quantized as q<sub>8</sub>( q<sub>8</sub>(**x**) + q<sub>8</sub>(**y**) )
-- avgpool is quantized as q<sub>8</sub>( *sum*( q<sub>18</sub>(**r**)\*q<sub>8</sub>(**x**) ) )
+- avgpool is quantized as q<sub>8</sub>( *sum*( q<sub>8</sub>(**r**)\*q<sub>8</sub>(**x**) ) )
 
 Graffitist is in experimental stages as we continue to add support for more operation types, layer topologies, network styles, graph optimizations, and compression techniques. To request support for options not mentioned above, please submit an [issue](https://github.com/Xilinx/graffitist/issues/new) with details.
 
@@ -166,20 +166,20 @@ The top-1/top-5 accuracy metrics are evaluated on Imagenet validation set (50k i
 
 ### Citations
 
-If you find our work useful for your research, please cite:
+Please consider citing our work if you find it useful for your research.
 
 #### Paper
 
 ```
-@article{alt2019,
-  title={Trained Uniform Quantization for Accurate and Efficient Neural Network Inference on Fixed-Point Hardware},
-  author={Jain, Sambhav R and Gural, Albert and Wu, Michael and Dick, Chris},
+@article{tqt2019,
+  title={Trained Quantization Thresholds for Accurate and Efficient Fixed-Point Inference of Deep Neural Networks},
+  author={Jain, Sambhav R and Gural, Albert and Wu, Michael and Dick, Chris H},
   journal={arXiv preprint arXiv:1903.08066},
   year={2019}
 }
 ```
 
-#### Code
+#### Framework
 
 ```
 @misc{graffitist2019,
@@ -212,7 +212,7 @@ python graffitize.pyc \
 
 For a full list of arguments and available transforms, use the help option: `python graffitize.pyc -h`.
 
-We also provide utility scripts for end-to-end ALT training and validation of Graffitist quantized networks on ImageNet.
+We also provide utility scripts for end-to-end training and validation of Graffitist quantized networks on ImageNet.
 
 #### Training
 
@@ -343,6 +343,8 @@ To get started, we provide a set of standard networks including graph descriptio
 | mobilenet_v1   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v1_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v1_slim_pretrained_train_2019-01-09.zip)
 | mobilenet_v2   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v2_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.mobilenet_v2_slim_pretrained_train_2019-01-09.zip)
 | darknet19      | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.darknet19_dw2tf_pretrained_0313_0943.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.darknet19_dw2tf_pretrained_train_0313_0943.zip)
+| yolo_v2        | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.yolo_v2_dw2tf_pretrained_2019-07-30.zip)
+| yolo_v2_tiny   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.yolo_v2_tiny_dw2tf_pretrained_2019-07-30.zip)
 
 If using one of the provided models, simply download and extract to `./models/` dir and proceed to [next step](#set-paths).
 
@@ -356,7 +358,7 @@ my_model.ckpt.meta (only needed in retrain mode)
 calibration_set.npy
 ```
 
-The graph `.pb` is a serialized TensorFlow protocol buffer containing the nodes and edges. Refer [here](https://www.tensorflow.org/guide/extend/model_files) for details on TensorFlow protocol buffers. Note that the input graph to Graffitist should NOT contain frozen weights, as they are read from a separate checkpoint.
+The graph `.pb` is a serialized TensorFlow protocol buffer containing the nodes and edges. Refer [here](https://www.tensorflow.org/guide/extend/model_files) for details on TensorFlow protocol buffers. Note that the input graph to Graffitist can contain frozen weights if static mode quantization is desired. For retrain mode, weights should NOT be frozen into the graph definition.
 
 The `checkpoint` file points to the specific `.ckpt` to use.  For example:
 ```
@@ -404,6 +406,8 @@ Choose a network and configure for either static or retrain mode:
 | mobilenet_v1   | [static](#mobilenet_v1-static) / [retrain](#mobilenet_v1-retrain)
 | mobilenet_v2   | [static](#mobilenet_v2-static) / [retrain](#mobilenet_v2-retrain)
 | darknet19      | [static](#darknet19-static) / [retrain](#darknet19-retrain)
+| yolo_v2        | [static](#yolo_v2-static)
+| yolo_v2_tiny   | [static](#yolo_v2_tiny-static)
 
 For a full list of default config options see [examples](#default-model-config).
 
@@ -512,7 +516,7 @@ quant_graph=$mdir/vgg16_slim_pretrained_quant.pb
 input_node=input
 output_node=vgg_16/fc8/squeezed
 input_shape=224,224,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -528,7 +532,7 @@ infquant_graph=$mdir/vgg16_slim_pretrained_infquant.pb
 input_node=input
 output_node=vgg_16/fc8/squeezed
 input_shape=224,224,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=vgg_16/conv1/conv1_1/Conv2D
 last_layer=vgg_16/fc8/Conv2D
 ```
@@ -544,7 +548,7 @@ quant_graph=$mdir/vgg19_slim_pretrained_quant.pb
 input_node=input
 output_node=vgg_19/fc8/squeezed
 input_shape=224,224,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -560,7 +564,7 @@ infquant_graph=$mdir/vgg19_slim_pretrained_infquant.pb
 input_node=input
 output_node=vgg_19/fc8/squeezed
 input_shape=224,224,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=vgg_19/conv1/conv1_1/Conv2D
 last_layer=vgg_19/fc8/Conv2D
 ```
@@ -576,7 +580,7 @@ quant_graph=$mdir/resnet_v1_50_slim_pretrained_quant.pb
 input_node=input
 output_node=resnet_v1_50/predictions/Softmax
 input_shape=224,224,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -592,7 +596,7 @@ infquant_graph=$mdir/resnet_v1_50_slim_pretrained_infquant.pb
 input_node=input
 output_node=resnet_v1_50/predictions/Softmax
 input_shape=224,224,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=resnet_v1_50/conv1/Conv2D
 last_layer=resnet_v1_50/logits/Conv2D
 ```
@@ -608,7 +612,7 @@ quant_graph=$mdir/resnet_v1_101_slim_pretrained_quant.pb
 input_node=input
 output_node=resnet_v1_101/predictions/Softmax
 input_shape=224,224,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -624,7 +628,7 @@ infquant_graph=$mdir/resnet_v1_101_slim_pretrained_infquant.pb
 input_node=input
 output_node=resnet_v1_101/predictions/Softmax
 input_shape=224,224,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=resnet_v1_101/conv1/Conv2D
 last_layer=resnet_v1_101/logits/Conv2D
 ```
@@ -640,7 +644,7 @@ quant_graph=$mdir/resnet_v1_152_slim_pretrained_quant.pb
 input_node=input
 output_node=resnet_v1_152/predictions/Softmax
 input_shape=224,224,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -656,7 +660,7 @@ infquant_graph=$mdir/resnet_v1_152_slim_pretrained_infquant.pb
 input_node=input
 output_node=resnet_v1_152/predictions/Softmax
 input_shape=224,224,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=resnet_v1_152/conv1/Conv2D
 last_layer=resnet_v1_152/logits/Conv2D
 ```
@@ -672,7 +676,7 @@ quant_graph=$mdir/inception_v1_bn_slim_pretrained_quant.pb
 input_node=input
 output_node=InceptionV1/Logits/Predictions/Softmax
 input_shape=224,224,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -688,7 +692,7 @@ infquant_graph=$mdir/inception_v1_bn_slim_pretrained_infquant.pb
 input_node=input
 output_node=InceptionV1/Logits/Predictions/Softmax
 input_shape=224,224,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=InceptionV1/InceptionV1/Conv2d_1a_7x7/Conv2D
 last_layer=InceptionV1/Logits/Conv2d_0c_1x1/Conv2D
 ```
@@ -704,7 +708,7 @@ quant_graph=$mdir/inception_v2_slim_pretrained_quant.pb
 input_node=input
 output_node=InceptionV2/Predictions/Softmax
 input_shape=224,224,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -720,7 +724,7 @@ infquant_graph=$mdir/inception_v2_slim_pretrained_infquant.pb
 input_node=input
 output_node=InceptionV2/Predictions/Softmax
 input_shape=224,224,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=InceptionV2/InceptionV2/Conv2d_1a_7x7/separable_conv2d/depthwise
 last_layer=InceptionV2/Logits/Conv2d_1c_1x1/Conv2D
 ```
@@ -736,7 +740,7 @@ quant_graph=$mdir/inception_v3_slim_pretrained_quant.pb
 input_node=input
 output_node=InceptionV3/Predictions/Softmax
 input_shape=299,299,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -752,7 +756,7 @@ infquant_graph=$mdir/inception_v3_slim_pretrained_infquant.pb
 input_node=input
 output_node=InceptionV3/Predictions/Softmax
 input_shape=299,299,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=InceptionV3/InceptionV3/Conv2d_1a_3x3/Conv2D
 last_layer=InceptionV3/Logits/Conv2d_1c_1x1/Conv2D
 ```
@@ -768,7 +772,7 @@ quant_graph=$mdir/inception_v4_slim_pretrained_quant.pb
 input_node=input
 output_node=InceptionV4/Logits/Predictions
 input_shape=299,299,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -784,7 +788,7 @@ infquant_graph=$mdir/inception_v4_slim_pretrained_infquant.pb
 input_node=input
 output_node=InceptionV4/Logits/Predictions
 input_shape=299,299,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=InceptionV4/InceptionV4/Conv2d_1a_3x3/Conv2D
 last_layer=InceptionV4/Logits/Logits/MatMul
 ```
@@ -800,7 +804,7 @@ quant_graph=$mdir/mobilenet_v1_slim_pretrained_quant.pb
 input_node=input
 output_node=MobilenetV1/Predictions/Softmax
 input_shape=224,224,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -816,7 +820,7 @@ infquant_graph=$mdir/mobilenet_v1_slim_pretrained_infquant.pb
 input_node=input
 output_node=MobilenetV1/Predictions/Softmax
 input_shape=224,224,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=MobilenetV1/MobilenetV1/Conv2d_0/Conv2D
 last_layer=MobilenetV1/Logits/Conv2d_1c_1x1/Conv2D
 ```
@@ -832,7 +836,7 @@ quant_graph=$mdir/mobilenet_v2_slim_pretrained_quant.pb
 input_node=input
 output_node=MobilenetV2/Predictions/Softmax
 input_shape=224,224,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -848,7 +852,7 @@ infquant_graph=$mdir/mobilenet_v2_slim_pretrained_infquant.pb
 input_node=input
 output_node=MobilenetV2/Predictions/Softmax
 input_shape=224,224,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=MobilenetV2/Conv/Conv2D
 last_layer=MobilenetV2/Logits/Conv2d_1c_1x1/Conv2D
 ```
@@ -864,7 +868,7 @@ quant_graph=$mdir/darknet19_quant.pb
 input_node=darknet19/net1
 output_node=darknet19/softmax1/Softmax
 input_shape=256,256,3
-wb=-8; ab=-8; lb=-16; rb=8; pb=-8; prb=18;
+wb=-8; ab=-8; lb=-16; rb=8; pb=-8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
@@ -880,9 +884,37 @@ infquant_graph=$mdir/darknet19_infquant.pb
 input_node=darknet19/net1
 output_node=darknet19/softmax1/Softmax
 input_shape=256,256,3
-[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=-8; prb=18;
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=-8; prb=8;
 first_layer=darknet19/convolutional1/Conv2D
 last_layer=darknet19/convolutional19/Conv2D
+```
+[[continue]](#pick-a-recipe-and-run)
+
+#### yolo_v2 (static)
+
+```
+mdir=$mroot/yolo_v2_dw2tf_pretrained
+in_graph=$mdir/yolov2.pb
+opt_graph=$mdir/yolov2_opt.pb
+quant_graph=$mdir/yolov2_quant.pb
+input_node=yolov2/net1
+output_node=yolov2/convolutional23/BiasAdd
+input_shape=608,608,3
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
+```
+[[continue]](#pick-a-recipe-and-run)
+
+#### yolo_v2_tiny (static)
+
+```
+mdir=$mroot/yolo_v2_tiny_dw2tf_pretrained
+in_graph=$mdir/yolov2-tiny.pb
+opt_graph=$mdir/yolov2-tiny_opt.pb
+quant_graph=$mdir/yolov2-tiny_quant.pb
+input_node=yolov2-tiny/net1
+output_node=yolov2-tiny/convolutional9/BiasAdd
+input_shape=416,416,3
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 ```
 [[continue]](#pick-a-recipe-and-run)
 
