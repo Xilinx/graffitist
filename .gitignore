@@ -2,3 +2,14 @@
 *.swo
 *.pyc
 .ipynb_checkpoints
+events.out.tfevents*
+*.h5
+*.ckpt
+*.ckpt.index
+*.ckpt.data*
+*.ckpt.meta
+*.pb
+models/*_pretrained*
+*.egg-info/
+dist/
+build/

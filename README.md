@@ -1,7 +1,7 @@
 <table style="width:100%">
 <tr>
 <th width="100%">
-<img src="docs/img/graffitist_white_left.svg" width="30%" align="center">
+<img src="img/graffitist_white_left.svg" width="30%" align="center">
 <h2>Graph Transforms to Quantize and Retrain Deep Neural Nets in TensorFlow</h2>
 </th>
 </tr>
@@ -9,7 +9,7 @@
 
 Graffitist is a flexible and scalable framework built on top of TensorFlow to process low-level graph descriptions of deep neural networks (DNNs) for accurate and efficient inference on fixed-point hardware. It comprises of a (growing) library of transforms to apply various neural network compression techniques such as quantization, pruning, and compression. Each transform consists of unique pattern matching and manipulation algorithms that when run sequentially produce an optimized output graph.
 
-<img src="docs/img/graffitist_flow.gif" width="100%">
+<img src="img/graffitist_flow.gif" width="100%">
 
 Graffitist uses a novel technique for training quantization thresholds (TQT) using standard backpropagation and gradient descent, which results in highly accurate and efficient 8-bit and 4-bit quantized networks amenable to most generic fixed-point hardware. For details, please refer to our paper:
 
@@ -43,7 +43,7 @@ Graffitist stands on the shoulders of giants, and the interface is inspired in p
       * [Install Anaconda3](#install-anaconda3)
       * [Install TensorFlow 1.14](#install-tensorflow-114)
       * [<em>(Optional)</em> Install CUDA 10.0, cuDNN 7](#optional-install-cuda-100-cudnn-7)
-      * [Clone Graffitist](#clone-graffitist)
+      * [Install Graffitist](#install-graffitist)
 * [How to run](#how-to-run)
    * [Prepare models](#prepare-models)
    * [Set paths](#set-paths)
@@ -184,7 +184,7 @@ Please consider citing our work if you find it useful for your research.
 ```
 @misc{graffitist2019,
   author = {Xilinx},
-  title = {Graffitist: Graph Transforms in TensorFlow to Quantize and Retrain Deep Neural Nets},
+  title = {Graffitist: Graph Transforms to Quantize and Retrain Deep Neural Nets in TensorFlow},
   year = {2019},
   publisher = {GitHub},
   journal = {GitHub repository},
@@ -201,7 +201,7 @@ Please consider citing our work if you find it useful for your research.
 Graffitist uses a Python interface and is invoked as follows:
 
 ```
-python graffitize.pyc \
+python graffitist/graffitize.pyc \
           --in_graph        <path_to_in_graph.pb> \
           --out_graph       <path_to_out_graph.pb> \
           --inputs          <input_node_name> \
@@ -210,14 +210,14 @@ python graffitize.pyc \
           --transforms      <list_of_transforms_to_apply>
 ```
 
-For a full list of arguments and available transforms, use the help option: `python graffitize.pyc -h`.
+For a full list of arguments and available transforms, use the help option: `python graffitist/graffitize.pyc -h`.
 
 We also provide utility scripts for end-to-end training and validation of Graffitist quantized networks on ImageNet.
 
 #### Training
 
 ```
-python utils/train_imagenet_tf.py \
+python scripts/train_imagenet_tf.py \
           --data_dir        <path_to_tfrecords_dir> \
           --ckpt_dir        <path_to_ckpt_meta_dir> \
           --image_size      <size> \
@@ -227,7 +227,7 @@ python utils/train_imagenet_tf.py \
 #### Validation
 
 ```
-python utils/validate_imagenet_tf.py \
+python scripts/validate_imagenet_tf.py \
           --data_dir        <path_to_tfrecords_dir> \
           --model_dir       <path_to_model_dir> \
           --image_size      <size> \
@@ -237,7 +237,7 @@ python utils/validate_imagenet_tf.py \
 #### Calibration set generation
 
 ```
-python utils/validate_imagenet_tf.py \
+python scripts/validate_imagenet_tf.py \
           --data_dir        <path_to_tfrecords_dir> \
           --model_dir       <path_to_model_dir> \
           --image_size      <size> \
@@ -311,11 +311,12 @@ The following NVIDIA® software is required to use TensorFlow with GPU support:
 - [CUPTI](http://docs.nvidia.com/cuda/cupti/) ships with the CUDA Toolkit.
 - [cuDNN SDK](https://developer.nvidia.com/cudnn) (>= 7.4.1)
 
-#### Clone Graffitist
+#### Install Graffitist
 
-Clone the master branch of Graffitist locally.
+Clone Graffitist and install locally.
 ```
 git clone https://github.com/Xilinx/graffitist.git
+pip install -e graffitist
 cd ./graffitist
 ```
 
@@ -379,8 +380,8 @@ Activate conda env and set paths:
 ```
 conda activate tf1.14
 
-groot=`find -maxdepth 3 -name 'graffitize.pyc' -printf '%h\n'`
-mroot=`find -maxdepth 1 -name 'models'`
+groot=`find -name 'graffitize.pyc' -printf '%h\n'`
+mroot=`find -name 'models'`
 ```
 
 To retrain for INT4, set `INT4_MODE` as follows (ignored in static mode):
