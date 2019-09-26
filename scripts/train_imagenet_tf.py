@@ -28,6 +28,7 @@ import numpy as np
 import tensorflow as tf
 
 # Local imports
+import graffitist
 import imagenet_utils as im_utils
 
 parser = argparse.ArgumentParser(description='TensorFlow ImageNet Training Script')
@@ -49,7 +50,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"]="2" # This is to filter out TensorFlow INFO a
 #os.environ["CUDA_VISIBLE_DEVICES"]="0" # GPU visible for training
 
 # Load python libraries for custom C++/CUDA quantize kernels.
-kernel_root = os.path.abspath(os.path.join(__file__, '../../kernels'))
+kernel_root = os.path.join(os.path.dirname(graffitist.__file__), 'kernels')
 if tf.test.is_built_with_cuda() and tf.test.is_gpu_available(cuda_only=True):
   _quantize_ops_module = tf.load_op_library(os.path.join(kernel_root, 'quantize_ops_cuda.so'))
 else:
