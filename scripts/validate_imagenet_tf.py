@@ -33,7 +33,7 @@ parser.add_argument('--model_dir', metavar='PATH', required=True,
           help='path to the model dir (saved_model or meta/ckpt or pb/ckpt) or path to frozen model.pb')
 parser.add_argument('--image_size', type=int, default=224, metavar='N',
           help='size of input image (default: 224)')
-parser.add_argument('-b', '--batch_size', default=64, type=int, metavar='N',
+parser.add_argument('-b', '--batch_size', type=int, default=64, metavar='N',
           help='mini-batch size (default: 64)')
 parser.add_argument('--gen_calib_set', dest='gen_calib_set', action='store_true',
           help='generate calibration dataset for quantization')
@@ -177,12 +177,15 @@ def validate(val_filenames):
       elif re.match('.*resnet_v1p5_50_keras.*', args.model_dir):
         input = g.get_tensor_by_name("input_1:0")
         output = g.get_tensor_by_name("activation_49/Softmax:0")
+      elif re.match('.*resnet_v1p5_50_estimator.*', args.model_dir):
+        input = g.get_tensor_by_name("input:0")
+        output = g.get_tensor_by_name("resnet_model/Softmax:0")
       elif re.match('.*caffe2tf.*', args.model_dir):
         input = g.get_tensor_by_name("input:0")
         output = g.get_tensor_by_name("prob:0")
       else:
         raise ValueError("Model input/outputs unknown!")
-      
+
       # Meters to keep track of validation progress
       batch_time = im_utils.AverageMeter()
       top1 = im_utils.AverageMeter()

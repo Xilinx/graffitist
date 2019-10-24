@@ -81,7 +81,7 @@ For simplicity and ease of mapping on generic fixed-point hardware, the quantiza
 - normalization: `FusedBatchNorm`
 - activation: `Relu`, `Relu6`, `LeakyRelu`, `Maximum` (for leaky-relu)
 - scale preserving: `ConcatV2`, `BiasAdd`, `Add` (eltwise-add), `Maximum` (for leaky-relu)
-- pool: `MaxPool`, `AvgPool`
+- pool: `MaxPool`, `AvgPool`, `Mean`
 - classifier: `Softmax`
 
 #### Supported layer topologies
@@ -96,6 +96,7 @@ For simplicity and ease of mapping on generic fixed-point hardware, the quantiza
 - normalization layers following compute layers are folded in
 - concat-of-concat layers are collapsed
 - identity nodes without control edges are spliced
+- reduced mean is transformed to global avgpool with stride equal to input spatial size
 - avgpool is transformed to depthwise conv with reciprocal multiplier as weights
 - input scale sharing is enforced for concat, bias-add, eltwise-add and max ops
 - relu/relu6 outputs are quantized to uint8 instead of int8
@@ -111,44 +112,30 @@ Graffitist is in experimental stages as we continue to add support for more oper
 
 ### Imagenet performance
 
-|  Static Mode   |      FP32     | INT8 (static) |
-|----------------|:-------------:|:-------------:|
-|                | top-1 / top-5 | top-1 / top-5 |
-| vgg16          |  70.9 / 89.8  |  70.4 / 89.7  |
-| vgg19          |  71.0 / 89.8  |  70.4 / 89.7  |
-| resnet_v1_50   |  75.2 / 92.2  |  74.3 / 91.7  |
-| resnet_v1_101  |  76.4 / 92.9  |  74.8 / 92.0  |
-| resnet_v1_152  |  76.8 / 93.2  |  76.2 / 93.0  |
-| inception_v1   |  69.8 / 89.6  |  68.6 / 88.9  |
-| inception_v2   |  74.0 / 91.8  |  73.1 / 91.3  |
-| inception_v3   |  78.0 / 93.9  |  76.8 / 93.3  |
-| inception_v4   |  80.2 / 95.2  |  79.4 / 94.6  |
-| mobilenet_v1   |  71.0 / 90.0  |   0.6 / 3.6   |
-| mobilenet_v2   |  70.1 / 89.5  |   0.3 / 1.2   |
-| darknet19      |  73.0 / 91.4  |  68.7 / 89.7  |
 
-|  Retrain Mode  |  FP32 (retrain wt)  |  INT8 (retrain wt)  | INT8 (retrain wt,th)|INT4^ (retrain wt,th)|
-|----------------|:-------------------:|:-------------------:|:-------------------:|:-------------------:|
-|                | top-1 / top-5 [#ep] | top-1 / top-5 [#ep] | top-1 / top-5 [#ep] | top-1 / top-5 [#ep] |
-| vgg16          |  71.9 / 90.5 [1.0]  |  71.8 / 90.5 [1.0]  |  71.7 / 90.4 [0.9]  |  71.5 / 90.3 [4.0]  |
-| vgg19          |  71.8 / 90.4 [1.0]  |  71.7 / 90.4 [1.0]  |  71.7 / 90.4 [1.0]  |  71.2 / 90.1 [2.0]  |
-| resnet_v1_50   |  75.4 / 92.5 [3.7]  |  75.3 / 92.3 [1.0]  |  75.4 / 92.3 [1.9]  |  74.4 / 91.7 [2.0]  |
-| resnet_v1_101  |  76.6 / 93.2 [1.2]  |  76.3 / 93.0 [1.0]  |  76.4 / 93.1 [0.9]  |  75.7 / 92.5 [2.0]  |
-| resnet_v1_152  |  76.8 / 93.3 [1.0]  |  76.7 / 93.3 [1.5]  |  76.7 / 93.3 [1.4]  |  76.0 / 93.0 [1.9]  |
-| inception_v1   |  70.3 / 90.0 [2.8]  |  70.6 / 90.3 [3.5]  |  70.7 / 90.2 [2.4]  |  67.2 / 88.2 [4.0]  |
-| inception_v2   |  74.3 / 92.2 [3.3]  |  74.4 / 92.3 [4.7]  |  74.4 / 92.4 [2.5]  |  71.9 / 90.8 [4.8]  |
-| inception_v3   |  78.3 / 94.2 [2.1]  |  78.2 / 94.1 [2.0]  |  78.3 / 94.3 [1.2]  |  76.4 / 93.1 [4.4]  |
-| inception_v4   |  80.2 / 95.2 [n/a]  |  80.1 / 95.3 [1.7]  |  80.1 / 95.2 [1.5]  |  78.9 / 94.7 [4.2]  |
-| mobilenet_v1   |  71.1 / 90.0 [3.4]  |  67.0 / 87.9 [4.6]  |  71.1 / 90.0 [2.1]  |      n/a            |
-| mobilenet_v2   |  71.7 / 90.7 [3.2]  |  68.2 / 89.0 [2.7]  |  71.8 / 90.6 [2.2]  |      n/a            |
-| darknet19      |  74.4 / 92.3 [3.1]  |  72.9 / 91.6 [3.8]  |  74.5 / 92.3 [1.8]  |  73.2 / 91.6 [2.8]  |
+|  Network       |      FP32     | INT8 (static) |  FP32 (retrain wt)  | INT8 (retrain wt,th)|INT4^ (retrain wt,th)|
+|----------------|:-------------:|:-------------:|:-------------------:|:-------------------:|:-------------------:|
+|                |  top1 / top5  |  top1 / top5  |  top1 / top5 [#ep]  |  top1 / top5 [#ep]  |  top1 / top5 [#ep]  |
+| vgg16          |  70.9 / 89.8  |  70.4 / 89.7  |  71.9 / 90.5 [1.0]  |  71.7 / 90.4 [0.9]  |  71.5 / 90.3 [4.0]  |
+| vgg19          |  71.0 / 89.8  |  70.4 / 89.7  |  71.8 / 90.4 [1.0]  |  71.7 / 90.4 [1.0]  |  71.2 / 90.1 [2.0]  |
+| resnet_v1_50   |  75.2 / 92.2  |  74.3 / 91.7  |  75.4 / 92.5 [3.7]  |  75.4 / 92.3 [1.9]  |  74.4 / 91.7 [2.0]  |
+| resnet_v1_101  |  76.4 / 92.9  |  74.8 / 92.0  |  76.6 / 93.2 [1.2]  |  76.4 / 93.1 [0.9]  |  75.7 / 92.5 [2.0]  |
+| resnet_v1_152  |  76.8 / 93.2  |  76.2 / 93.0  |  76.8 / 93.3 [1.0]  |  76.7 / 93.3 [1.4]  |  76.0 / 93.0 [1.9]  |
+| resnet_v1p5_50 |  76.5 / 93.1  |  75.6 / 92.7  |  76.5 / 93.1 [n/a]  |  76.4 / 93.1 [0.7]  |  75.1 / 92.6 [2.8]  |
+| inception_v1   |  69.8 / 89.6  |  68.6 / 88.9  |  70.3 / 90.0 [2.8]  |  70.7 / 90.2 [2.4]  |  67.2 / 88.2 [4.0]  |
+| inception_v2   |  74.0 / 91.8  |  73.1 / 91.3  |  74.3 / 92.2 [3.3]  |  74.4 / 92.4 [2.5]  |  71.9 / 90.8 [4.8]  |
+| inception_v3   |  78.0 / 93.9  |  76.8 / 93.3  |  78.3 / 94.2 [2.1]  |  78.3 / 94.3 [1.2]  |  76.4 / 93.1 [4.4]  |
+| inception_v4   |  80.2 / 95.2  |  79.4 / 94.6  |  80.2 / 95.2 [n/a]  |  80.1 / 95.2 [1.5]  |  78.9 / 94.7 [4.2]  |
+| mobilenet_v1   |  71.0 / 90.0  |   0.6 / 3.6   |  71.1 / 90.0 [3.4]  |  71.1 / 90.0 [2.1]  |      n/a            |
+| mobilenet_v2   |  70.1 / 89.5  |   0.3 / 1.2   |  71.7 / 90.7 [3.2]  |  71.8 / 90.6 [2.2]  |      n/a            |
+| darknet19      |  73.0 / 91.4  |  68.7 / 89.7  |  74.4 / 92.3 [3.1]  |  74.5 / 92.3 [1.8]  |  73.2 / 91.6 [2.8]  |
+
 
 ^INT4 weights, INT8 activations. First/last layer weights are kept as INT8.
 
 #### Changelog
 
 The following modifications were done before exporting the graph definitions to serialized TensorFlow protocol buffers:
-1. Replaced `reduce_mean` with `avg_pool`
 1. Removed `dropout`
 1. Removed auxiliary logits layers
 
@@ -278,8 +265,8 @@ else:
 
 Download and install Anaconda3.
 ```
-wget https://repo.anaconda.com/archive/Anaconda3-2019.03-Linux-x86_64.sh
-bash ./Anaconda3-2019.03-Linux-x86_64.sh
+wget https://repo.anaconda.com/archive/Anaconda3-2019.07-Linux-x86_64.sh
+bash ./Anaconda3-2019.07-Linux-x86_64.sh
 ```
 
 When prompted, allow the installer to initialize Anaconda3 and setup your `.bashrc`. Then close and open a new bash shell to source the installation correctly.
@@ -316,8 +303,8 @@ The following NVIDIA® software is required to use TensorFlow with GPU support:
 Clone Graffitist and install locally.
 ```
 git clone https://github.com/Xilinx/graffitist.git
-pip install -e graffitist
-cd ./graffitist
+cd graffitist
+pip install -e .
 ```
 
 [[back to ToC]](#contents)
@@ -337,6 +324,7 @@ To get started, we provide a set of standard networks including graph descriptio
 | resnet_v1_50   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.resnet_v1_50_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.resnet_v1_50_slim_pretrained_train_2019-01-09.zip)
 | resnet_v1_101  | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.resnet_v1_101_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.resnet_v1_101_slim_pretrained_train_2019-01-09.zip)
 | resnet_v1_152  | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.resnet_v1_152_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.resnet_v1_152_slim_pretrained_train_2019-01-09.zip)
+| resnet_v1p5_50 | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.resnet_v1p5_50_estimator_pretrained_2019-10-23.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.resnet_v1p5_50_estimator_pretrained_train_2019-10-23.zip)
 | inception_v1   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.inception_v1_bn_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.inception_v1_bn_slim_pretrained_train_2019-01-09.zip)
 | inception_v2   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.inception_v2_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.inception_v2_slim_pretrained_train_2019-01-09.zip)
 | inception_v3   | [static](https://www.xilinx.com/bin/public/openDownload?filename=models.inception_v3_slim_pretrained_2019-01-09.zip) / [retrain](https://www.xilinx.com/bin/public/openDownload?filename=models.inception_v3_slim_pretrained_train_2019-01-09.zip)
@@ -372,7 +360,6 @@ The metagraph `.meta` contains the graph and training metadata (e.g. variable co
 
 The calibration set `.npy` contains N randomly sampled images with applied data pre-processing, stored as a numpy array of shape `[N, H, W, C]`. See the included [validation script](#calibration-set-generation) for more details on generating a calibration set.
 
-UPDATE: [SavedModel](https://www.tensorflow.org/guide/saved_model) interface is on the way!
 
 ### Set paths
 
@@ -400,6 +387,7 @@ Choose a network and configure for either static or retrain mode:
 | resnet_v1_50   | [static](#resnet_v1_50-static) / [retrain](#resnet_v1_50-retrain)
 | resnet_v1_101  | [static](#resnet_v1_101-static) / [retrain](#resnet_v1_101-retrain)
 | resnet_v1_152  | [static](#resnet_v1_152-static) / [retrain](#resnet_v1_152-retrain)
+| resnet_v1p5_50 | [static](#resnet_v1p5_50-static) / [retrain](#resnet_v1p5_50-retrain)
 | inception_v1   | [static](#inception_v1-static) / [retrain](#inception_v1-retrain)
 | inception_v2   | [static](#inception_v2-static) / [retrain](#inception_v2-retrain)
 | inception_v3   | [static](#inception_v3-static) / [retrain](#inception_v3-retrain)
@@ -664,6 +652,38 @@ input_shape=224,224,3
 [ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
 first_layer=resnet_v1_152/conv1/Conv2D
 last_layer=resnet_v1_152/logits/Conv2D
+```
+[[continue]](#pick-a-recipe-and-run)
+
+#### resnet_v1p5_50 (static)
+
+```
+mdir=$mroot/resnet_v1p5_50_estimator_pretrained
+in_graph=$mdir/resnet_v1p5_50_estimator_pretrained.pb
+opt_graph=$mdir/resnet_v1p5_50_estimator_pretrained_opt.pb
+quant_graph=$mdir/resnet_v1p5_50_estimator_pretrained_quant.pb
+input_node=input
+output_node=resnet_model/Softmax
+input_shape=224,224,3
+wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
+```
+[[continue]](#pick-a-recipe-and-run)
+
+#### resnet_v1p5_50 (retrain)
+
+```
+mdir=$mroot/resnet_v1p5_50_estimator_pretrained_train
+in_metagraph=$mdir/resnet_v1p5_50_estimator_pretrained.ckpt.meta
+in_graph=$mdir/resnet_v1p5_50_estimator_pretrained.pb
+opt_graph=$mdir/resnet_v1p5_50_estimator_pretrained_opt.pb
+trainquant_graph=$mdir/resnet_v1p5_50_estimator_pretrained_trainquant.pb
+infquant_graph=$mdir/resnet_v1p5_50_estimator_pretrained_infquant.pb
+input_node=input
+output_node=resnet_model/Softmax
+input_shape=224,224,3
+[ "$INT4_MODE" = 1 ] && wb=-4 || wb=-8; ab=-8; lb=-16; rb=8; pb=8; prb=8;
+first_layer=resnet_model/conv2d/Conv2D
+last_layer=resnet_model/dense/MatMul
 ```
 [[continue]](#pick-a-recipe-and-run)
 

@@ -561,6 +561,9 @@ def dataset_input_fn(filenames, model_dir, image_size, batch_size, num_threads, 
     elif re.match('.*resnet_v1p5.*keras.*', model_dir):
       # Center crop, aspect preserving resize, mean subtraction
       image = vgg_preprocess_input_fn(image, image_size, image_size, is_training)
+    elif re.match('.*resnet_v1p5.*estimator.*', model_dir):
+      # Center crop, aspect preserving resize, mean subtraction
+      image = vgg_preprocess_input_fn(image, image_size, image_size, is_training)
     elif re.match('.*darknet19.*', model_dir):
       # Center crop, resize, normalize [0, 255] -> [0, 1]
       image = darknet_preprocess_input_fn(image, image_size, image_size, is_training)

@@ -40,9 +40,9 @@ parser.add_argument('--meta_path', metavar='PATH', required=False,
           help='path to the metagraph (optional, if not in ckpt_dir)')
 parser.add_argument('--image_size', type=int, default=224, metavar='N',
           help='size of input image (default: 224)')
-parser.add_argument('-b_t', '--batch_size_t', default=24, type=int, metavar='N',
+parser.add_argument('-b_t', '--batch_size_t', type=int, default=24, metavar='N',
           help='training mini-batch size (default: 24)')
-parser.add_argument('-b_v', '--batch_size_v', default=64, type=int, metavar='N',
+parser.add_argument('-b_v', '--batch_size_v', type=int, default=64, metavar='N',
           help='validation mini-batch size (default: 64)')
 
 
@@ -212,6 +212,10 @@ def train(train_filenames, val_filenames):
     input = g.get_tensor_by_name("input_1:0")
     logits = g.get_tensor_by_name("fc1000/BiasAdd:0")
     output = g.get_tensor_by_name("activation_49/Softmax:0")
+  elif re.match('.*resnet_v1p5_50_estimator.*', args.ckpt_dir):
+    input = g.get_tensor_by_name("input:0")
+    logits = g.get_tensor_by_name("resnet_model/dense/BiasAdd_biasadd_quant/LinearQuant:0")
+    output = g.get_tensor_by_name("resnet_model/Softmax:0")
   else:
     raise ValueError("Model input/outputs unknown!")
 
