@@ -7,7 +7,7 @@ with open(path.join(pwd, 'README.md'), encoding='utf-8') as f:
   long_description = f.read()
 
 setup(name='graffitist',
-      version='2.0.2',
+      version='2.0.3',
       description='Graph Transforms to Quantize and Retrain Deep Neural Nets in TensorFlow.',
       long_description=long_description,
       long_description_content_type='text/markdown',
